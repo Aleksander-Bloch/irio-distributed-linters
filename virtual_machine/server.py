@@ -21,9 +21,8 @@ async def save_file(upload_file: UploadFile, save_path: str):
         file_to_save.write(file_bytes)
 
 
-@app.post("/lint/")
+@app.post("/lint_code_file/")
 async def lint_code_file(linter_name: str, linter_version: int, code_file: UploadFile):
-
     # get file id for saving user's code to lint
     code_file_id_lock.acquire()
     global code_file_id
@@ -49,16 +48,7 @@ async def lint_code_file(linter_name: str, linter_version: int, code_file: Uploa
 # If we receive (linter_name, version) that already exists, the old record will be overriden
 @app.post("/add_linter/")
 async def add_linter(linter_name: str, linter_version: int, linter_file: UploadFile):
-
     linter_file_name = f"{linter_name}_{linter_version}.py"
     await save_file(linter_file, linter_file_name)
 
     linters_manager.add_linter(Linter(linter_name, linter_version, linter_file_name))
-
-
-
-
-
-
-
-
