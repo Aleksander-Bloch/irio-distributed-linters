@@ -1,5 +1,7 @@
-def no_semicolons(lint_input: str):
+import sys
 
+
+def no_semicolons(lint_input: str):
     curr_line = 1
     curr_char_in_line = 0
 
@@ -14,6 +16,12 @@ def no_semicolons(lint_input: str):
     return True, "CORRECT: no redundant semicolons in code"
 
 
-with open("test_no_semicolons.txt", "r") as test_file:
-    print(no_semicolons(test_file.read()))
+if __name__ == "__main__":
+    code_file_name = sys.argv[1]
 
+    with open(code_file_name, "r") as code_file:
+        code_file_str = code_file.read()
+
+    lint_status, lint_message = no_semicolons(code_file_str)
+
+    print(lint_status, lint_message, end="")
