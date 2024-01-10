@@ -1,0 +1,4 @@
+venv/*
+linter_pb2.py
+linter_pb2.pyi
+linter_pb2_grpc.py
