@@ -1,3 +1,4 @@
 fastapi[all]
 grpcio
 grpcio-tools
+requests
