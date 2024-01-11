@@ -2,7 +2,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import os
 
-app = FastAPI()
+################################
+
+# BUSINESS LOGIC
+
+################################
 
 
 def get_endpoint(linter_name, linter_version):
@@ -18,8 +22,12 @@ def lint_code(linter_name: str, linter_version: str, code: str):
     linting_result = get_result_from_endpoint(endpoint, code)
     return {"linting result": linting_result}
 
+############################
 
+# FASTAPI-SPECIFIC CODE
 
+############################
+app = FastAPI()
 
 class LintingRequest(BaseModel):
     linter_name: str

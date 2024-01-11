@@ -7,7 +7,7 @@ def run():
     # used in circumstances in which the with statement does not fit the needs
     # of the code.
     print("Will try to send code ...")
-    with grpc.insecure_channel("localhost:50051") as channel:
+    with grpc.insecure_channel("localhost:12345") as channel:
         stub = linter_pb2_grpc.LinterStub(channel)
         response = stub.LintCode(linter_pb2.LintingRequest(code="print(helloworld)"))
     print("Greeter client received: " + str(response))

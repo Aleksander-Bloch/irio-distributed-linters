@@ -1,8 +1,11 @@
 from typing import List
 from fastapi import FastAPI
 
-app = FastAPI()
+################################
 
+# BUSINESS LOGIC
+
+################################
 
 class MachineManager:
 
@@ -39,6 +42,13 @@ class MachineManager:
         """This is the function for staged rollout """
         raise NotImplementedError
     
+
+############################
+
+# FASTAPI-SPECIFIC CODE
+
+############################
+app = FastAPI()
 
 machine_manager = MachineManager()
 
