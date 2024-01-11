@@ -1,4 +1,4 @@
-Tested with python 3.11
+Tested with python 3.10
 
 Generate protobuf stubs with:
 `python -m grpc_tools.protoc -I./ --python_out=./ --pyi_out=./ --grpc_python_out=./ *.proto`
