@@ -1,31 +1,17 @@
 from concurrent import futures
-from typing import Tuple
 import logging
 import grpc
 
 import linter_pb2, linter_pb2_grpc
 
-from linter_implementation import linter_implementation
+from linter_base import LinterBase
+from linter_implementation import LinterImpl
 #This file is moved to the correct path by Dockerfile, a bit hacky to avoid code duplication.
-
-
-class LinterBase:
-    def get_name(self) -> str:
-        raise NotImplementedError
-    
-    def get_version(self) -> str:
-        raise NotImplementedError
-    
-    def lint_code(self, code) -> Tuple[int, str]:
-        raise NotImplementedError
-
-
-
 
 class LinterWrapper(linter_pb2_grpc.LinterServicer):
     def __init__(self):
         super().__init__()
-        self.linter: LinterBase = linter_implementation()
+        self.linter: LinterBase = LinterImpl()
 
     def LintCode(self, request: linter_pb2.LintingRequest, context) -> linter_pb2.LintingResult:
         """Missing associated documentation comment in .proto file."""
