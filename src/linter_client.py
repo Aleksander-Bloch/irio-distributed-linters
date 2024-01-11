@@ -1,18 +1,16 @@
 import grpc
 import logging
 import linter_pb2, linter_pb2_grpc
-
-def run():
-    # NOTE(gRPC Python Team): .close() is possible on a channel and should be
-    # used in circumstances in which the with statement does not fit the needs
-    # of the code.
-    print("Will try to send code ...")
-    with grpc.insecure_channel("localhost:12345") as channel:
-        stub = linter_pb2_grpc.LinterStub(channel)
-        response = stub.LintCode(linter_pb2.LintingRequest(code="print(helloworld)"))
-    print("Greeter client received: " + str(response))
+from typing import Tuple
 
 
-if __name__ == "__main__":
-    logging.basicConfig()
-    run()
+class LinterClient:
+    def __init__(self, hostport):
+        self.channel = grpc.insecure_channel(hostport)
+        self.stub = linter_pb2_grpc.LinterStub(self.channel)
+
+    def lint_code(self, code) -> Tuple[int, str]:
+        response = self.stub.LintCode(linter_pb2.LintingRequest(code=code))
+        status_code = response.status
+        comment = response.comment
+        return status_code, comment
