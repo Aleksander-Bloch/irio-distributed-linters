@@ -48,7 +48,7 @@ app = FastAPI()
 loadbalancer = LoadBalancer()
 class LintingRequest(BaseModel):
     linter_name: str
-    linter_version: str | None = None
+    linter_version: Optional[str]  = None
     code: str
 
 class ResponseMessage(BaseModel):
