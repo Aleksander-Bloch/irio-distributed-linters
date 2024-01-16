@@ -1,7 +1,9 @@
-import grpc
-import logging
-import linter_pb2, linter_pb2_grpc
 from typing import Tuple
+
+import grpc
+
+import linter_pb2
+import linter_pb2_grpc
 
 
 class LinterClient:

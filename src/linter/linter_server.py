@@ -6,7 +6,9 @@ import linter_pb2, linter_pb2_grpc
 
 from linter_base import LinterBase
 from linter_implementation import LinterImpl
-#This file is moved to the correct path by Dockerfile, a bit hacky to avoid code duplication.
+
+
+# This file is moved to the correct path by Dockerfile, a bit hacky to avoid code duplication.
 
 class LinterWrapper(linter_pb2_grpc.LinterServicer):
     def __init__(self):

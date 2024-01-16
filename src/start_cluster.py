@@ -1,6 +1,7 @@
-### Assumes machine management is running at 8001: `uvicorn machine_management:app --port 8001 --reload`
+# Assumes machine management is running at 8001: `uvicorn machine_management:app --port 8001 --reload`
 
 import requests
+
 
 # hardcoded_config = [
 #     {
@@ -45,7 +46,8 @@ def add_machine(ip_port):
         print("Machine added successfully!")
     else:
         print(f"Failed to add machine. Status code: {response.status_code}")
-        print(response.text) 
+        print(response.text)
+
 
 def add_new_linter(management_url, linter_name, linter_version, docker_image):
     print("adding linter")
@@ -76,6 +78,7 @@ def remove_linter(management_url, linter_name):
         print(f"Failed to remove linter. Status code: {response.status_code}")
         print(response.text)
 
+
 if __name__ == "__main__":
     management_url = "http://localhost:8001"
     add_machine("localhost")
@@ -84,5 +87,3 @@ if __name__ == "__main__":
     input()
     remove_linter(management_url, "spaces_around_equals")
     remove_linter(management_url, "no_semicolons")
-
-    
