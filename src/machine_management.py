@@ -98,6 +98,9 @@ class RunningLinter(BaseModel):
     linter_name: str
     exposed_port: int
 
+    def get_host_port(self):
+        return f"{self.machine.split(':')[0]}:{self.exposed_port}"
+
 
 # The public counterpart to RunningLinter
 class LinterEndpoint(BaseModel):
@@ -111,7 +114,11 @@ class MachineManager:
     def __init__(self, container_manager_factory: Callable[[str], ContainerManager]):
         self.container_manager_factory = container_manager_factory
         self.registered_machines = []
+
         self.container_managers: Dict[str, ContainerManager] = {}
+
+        # for each machine gives current number of linters working there
+        self.machine_to_n_linters: Dict[str, int] = {}
 
         self.running_linters: List[RunningLinter] = []
 
@@ -120,16 +127,20 @@ class MachineManager:
 
         self.load_balancer_url = ""
 
+        self.linter_name_to_curr_version: Dict[str, str] = {}
+
     # for each added machine create container manager
     def add_machine(self, ip_port: str) -> None:
         container_manager = self.container_manager_factory(ip_port)
         self.registered_machines.append(ip_port)
         self.container_managers[ip_port] = container_manager
+        self.machine_to_n_linters[ip_port] = 0
         logging.info(f"Added machine {ip_port}")
 
     def delete_machine(self, ip_port: str) -> None:
         self.registered_machines.remove(ip_port)
         self.container_managers.pop(ip_port)
+        self.machine_to_n_linters.pop(ip_port)
         logging.info(f"Removed machine {ip_port}")
 
     def list_machines(self):
@@ -139,43 +150,53 @@ class MachineManager:
 
         self.linter_images[linter_name, linter_version] = docker_image
 
-        is_update = False
-        for linter in self.running_linters:
-            if linter.linter_name == linter_name:
-                logging.debug(f"Detected previous version of linter {linter_name}")
-                is_update = True
-                break
+        # is_update = False
+        # for linter in self.running_linters:
+        #     if linter.linter_name == linter_name:
+        #         logging.debug(f"Detected previous version of linter {linter_name}")
+        #         is_update = True
+        #         break
+        #
+        # if is_update:
+        #     logging.info(f"Updating linter {linter_name} to version {linter_version}")
+        #     # Logic for staged update goes here.
+        #     raise NotImplementedError
+        # else:
+        #     logging.info(f"Creating first version of linter {linter_name}")
+        #     # TODO have a smarter placement algorithm, maybe strategy?
+        #     # because for now we start linter instance on every machine available
+        #     if not self.registered_machines:
+        #         raise ValueError("No machines available to run linter")
+        #     for machine in self.registered_machines:
+        #         self.start_linter_instance(linter_name, linter_version, machine)
 
-        if is_update:
-            logging.info(f"Updating linter {linter_name} to version {linter_version}")
-            # Logic for staged update goes here.
-            raise NotImplementedError
-        else:
-            logging.info(f"Creating first version of linter {linter_name}")
-            # TODO have a smarter placement algorithm, maybe strategy?
-            # because for now we start linter instance on every machine available
-            if not self.registered_machines:
-                raise ValueError("No machines available to run linter")
-            for machine in self.registered_machines:
-                self.start_linter_instance(linter_name, linter_version, machine)
-
-    def remove_linter(self, linter_name):
+    def remove_linter(self, linter_name, linter_version):
         """Kill all linter instances and deregister"""
-        logging.info(f"Removing all versions of linter {linter_name}")
+        logging.info(f"Removing linter named {linter_name}, version {linter_version}")
 
-        # TODO what do we do for nonexistent linters?
-        running_instances = [linter for linter in self.running_linters if linter.linter_name == linter_name]
+        # TODO may be we should do something about not existing linter
+        self.linter_images.pop((linter_name, linter_version), "ignore if not exists")
+
+        running_instances = [linter for linter in self.running_linters if
+                             linter.linter_name == linter_name and linter.linter_version == linter_version]
         for linter in running_instances:
+            self.machine_to_n_linters[linter.machine] -= 1
             self.stop_linter_instance(linter.machine, linter.container_name)
 
         # remove docker images of all versions of linter with [linter_name]
-        versions = [version for (name, version) in self.linter_images.keys() if name == linter_name]
-        for v in versions:
-            self.linter_images.pop((linter_name, v))
+        # versions = [version for (name, version) in self.linter_images.keys() if name == linter_name]
+        # for v in versions:
+        #     self.linter_images.pop((linter_name, v))
 
     def start_linter_instance(self, linter_name, linter_version, machine) -> Tuple[str, int]:
         """Start a new instance of a given registered linter"""
         logging.info(f"Starting linter {linter_name} v {linter_version} instance on {machine}")
+
+        # if we add the very first linter of the name [linter_name] set current version
+        # for its name to its version
+        if linter_name not in self.linter_name_to_curr_version:
+            self.linter_name_to_curr_version[linter_name] = linter_version
+
         cont_manager = self.container_managers[machine]
         docker_image = self.linter_images[linter_name, linter_version]
         # TODO start_container may fail and throw
@@ -204,9 +225,21 @@ class MachineManager:
 
     def list_linters(self) -> List[LinterEndpoint]:
         # hostport: get only ip from machine and add port to particular linter
-        return [LinterEndpoint(hostport=f"{linter.machine.split(':')[0]}:{linter.exposed_port}",
+        return [LinterEndpoint(hostport=linter.get_host_port(),
                                name=linter.linter_name,
                                version=linter.linter_version) for linter in self.running_linters]
+
+    # returns list of host_ports of linter instances with linter_name and current version
+    def list_linters_with_curr_version(self, linter_name: str):
+        return [linter.host_port for linter in self.running_linters if linter.linter_name == linter_name
+                and linter.linter_version == self.linter_name_to_curr_version[linter_name]]
+
+    def list_linters_instances(self, linter_name: str, linter_version: str):
+        return [linter.host_port for linter in self.running_linters if linter.linter_name == linter_name
+                and linter.linter_version == linter_version]
+
+    def get_machine_with_least_linters(self) -> str:
+        return min(self.machine_to_n_linters, key=self.machine_to_n_linters.get)
 
 
 ############################
@@ -255,14 +288,32 @@ async def add_new_linter(linter_name: str, linter_version: str, docker_image: st
 
 
 @app.post("/remove_linter/")
-async def remove_linter(linter_name):
+async def remove_linter(linter_name: str, linter_version: str):
     """Remove all running versions of a given linter"""
-    return machine_manager.remove_linter(linter_name)
+    return machine_manager.remove_linter(linter_name, linter_version)
 
 
 @app.get("/list_linters/")
 async def list_linters() -> List[LinterEndpoint]:
     return machine_manager.list_linters()
+
+
+@app.get("/list_linters_with_curr_version/")
+async def list_linters_with_curr_version(linter_name: str) -> List[str]:
+    return machine_manager.list_linters_with_curr_version(linter_name)
+
+
+@app.get("/list_linter_instances/")
+async def list_linter_instances(linter_name: str, linter_version: str) -> List[str]:
+    return machine_manager.list_linters_instances(linter_name, linter_version)
+
+
+@app.post("/start_linters/")
+async def start_linters(linter_name: str, linter_version: str, n_instances: int):
+    for i in range(n_instances):
+        machine = machine_manager.get_machine_with_least_linters()
+        machine_manager.start_linter_instance(linter_name, linter_version, machine)
+        machine_manager.machine_to_n_linters[machine] += 1
 
 
 @app.post("/rollout/")
@@ -290,7 +341,7 @@ def main():
     parser.add_argument('-lba', '--load_balancer_address')
     parsed_args = parser.parse_args()
 
-    machine_manager.load_balancer_url = parsed_args.lba
+    machine_manager.load_balancer_url = parsed_args.load_balancer_address
 
     uvicorn.run(app, port=int(parsed_args.port), host=parsed_args.host)
 
