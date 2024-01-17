@@ -70,6 +70,10 @@ class RolloutManager:
         else:
             return rollout_data.old_version
 
+    def end_rollout(self, linter_name: str):
+        self.linter_name_to_rollout_data.pop(linter_name, "no rollout")
+        self.linter_name_to_traffic_data.pop(linter_name, "no rollout")
+
 
 class LoadBalancingStrategy(ABC):
     @abstractmethod
@@ -184,9 +188,16 @@ async def lint_code_endpoint(request: LintingRequest):
 
 @app.post("/rollout/")
 async def rollout_endpoint(request: RolloutRequest):
+    if request.traffic_percent_to_new_version == 100:
+        loadbalancer.rollout_manager.end_rollout(request.linter_name)
     loadbalancer.rollout_manager.start_rollout(request.linter_name, RolloutData(request.old_version,
                                                                                 request.new_version,
                                                                                 request.traffic_percent_to_new_version))
+
+
+@app.post("/rollback/")
+async def rollback_endpoint(linter_name: str):
+    loadbalancer.rollout_manager.end_rollout(linter_name)
 
 
 app.mount("/", StaticFiles(directory="./static", html=True))
