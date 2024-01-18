@@ -297,7 +297,7 @@ def create_app(load_balancer_url: str):
 
     @app.post("/remove_linter/")
     async def remove_linter(linter_name: str, linter_version: str):
-        """Remove all running versions of a given linter"""
+        """Deregister a given linter version, killing all its running instances."""
         return machine_manager.remove_linter(linter_name, linter_version)
 
     @app.get("/list_registered_linters/")
