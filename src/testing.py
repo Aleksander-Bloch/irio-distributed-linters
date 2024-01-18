@@ -14,6 +14,7 @@ machine_management_host = "localhost"
 load_balancer_addr = f"http://{load_balancer_host}:{load_balancer_port}"
 machine_management_addr = f"http://{machine_management_host}:{machine_management_port}"
 
+
 # hardcoded_config = [
 #     {
 #         "hostport": "localhost:12301",
@@ -62,6 +63,11 @@ def start_linters_helper(name, version, n_instances=1):
     return requests.post(f"{machine_management_addr}/start_linters/", json=start_linters_request)
 
 
+def lint_code_helper(linter_name, code):
+    lint_code_request = {"linter_name": linter_name, "code": code}
+    return requests.post(f"{load_balancer_addr}/lint_code/", json=lint_code_request)
+
+
 def run_stop_system(func):
     def inner():
         running_system = run_system(load_balancer_host, load_balancer_port, machine_management_host,
@@ -71,6 +77,7 @@ def run_stop_system(func):
             func()
         finally:
             stop_system(running_system)
+            subprocess.run("docker stop $(docker ps -a -q)", shell=True)
 
     return inner
 
@@ -102,5 +109,26 @@ def test_start_linter_instance():
     assert response.status_code == 200
 
 
+@run_stop_system
+def test_linting():
+    response = add_machine_helper("localhost")
+    assert response.status_code == 200
+
+    response = add_linter_helper("no_semicolons", "v1", "ghcr.io/chedatomasz/no_semicolons:v0")
+    assert response.status_code == 200
+
+    response = start_linters_helper("no_semicolons", "v1")
+    assert response.status_code == 200
+
+    time.sleep(5)
+
+    response = lint_code_helper("no_semicolons", "dsfjsdalfdsaf;fksjfklsdaf")
+
+    assert response.status_code == 200
+
+    print(response.content)
+    print(response.status_code)
+
+
 if __name__ == "__main__":
-    test_start_linter_instance()
+    test_linting()
