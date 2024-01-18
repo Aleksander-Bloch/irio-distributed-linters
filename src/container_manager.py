@@ -3,6 +3,7 @@ import logging
 import subprocess
 import uuid
 from typing import Tuple
+import time
 
 # TODO make this threadsafe
 
@@ -63,6 +64,9 @@ class SSHContainerManager(ContainerManager):
         # request to [machine_port] of the machine will be forwarded to this docker
         docker_command = f"docker run --rm --detach --name {container_name} -p {machine_port}:{50051} {docker_image}"
         res = subprocess.run(["ssh", f"{self.machine}", docker_command])
+
+        # delay to wait for grpc start
+        time.sleep(1)
 
         logging.debug("Command completed")
         res.check_returncode()

@@ -11,14 +11,14 @@ class LoadBalancerClient:
         self.load_balancer_url = load_balancer_url
 
     def rollout(self, request):
-        requests.post(f"{self.load_balancer_url}/rollout/", data=request)
+        requests.post(f"{self.load_balancer_url}/rollout/", json=request.model_dump())
 
     def rollback(self, linter_name):
-        requests.post(f"{self.load_balancer_url}/rollback/", params={"linter_name": linter_name}) 
+        requests.post(f"{self.load_balancer_url}/rollback/", params={"linter_name": linter_name})
 
 
 class RunningLinter(BaseModel):
-    machine: str #TODO change to only have machine host, no port
+    machine: str  # TODO change to only have machine host, no port
     container_name: str
     linter_version: str
     linter_name: str
@@ -60,7 +60,7 @@ class MachineManager:
                  load_balancer_client: LoadBalancerClient):
         self.container_manager_factory = container_manager_factory
         self.load_balancer_client = load_balancer_client
-        
+
         self.registered_machines = []
 
         self.container_managers: Dict[str, ContainerManager] = {}
@@ -72,8 +72,6 @@ class MachineManager:
 
         # (linter_name, linter_version) -> docker image
         self.linter_images: Dict[Tuple[str, str], str] = {}
-
-
 
         self.linter_name_to_curr_version: Dict[str, str] = {}
 
@@ -96,13 +94,12 @@ class MachineManager:
     def list_machines(self):
         return self.registered_machines
 
-
     #############
     # LINTER VERSIONS
     #############
     def register_linter(self, linter_name, linter_version, docker_image):
         self.linter_images[linter_name, linter_version] = docker_image
-        logging.info("Registered linter {linter_name} in version {linter_version}")
+        logging.info(f"Registered linter {linter_name} in version {linter_version}")
 
     def remove_linter(self, linter_name, linter_version):
         """Kill all linter instances and deregister"""
@@ -123,7 +120,8 @@ class MachineManager:
         #     self.linter_images.pop((linter_name, v))
 
     def list_registered_linters(self):
-        return[RegisterLinterData(linter_name=name, linter_version = version, docker_image=image) for (name,version), image in self.linter_images.items()]
+        return [RegisterLinterData(linter_name=name, linter_version=version, docker_image=image) for
+                (name, version), image in self.linter_images.items()]
 
     #############
     # LINTER INSTANCES
@@ -148,6 +146,7 @@ class MachineManager:
                                         linter_version=linter_version,
                                         linter_name=linter_name,
                                         exposed_port=port)
+
         self.running_linters.append(linter_instance)
         return container_name, port
 
@@ -180,8 +179,8 @@ class MachineManager:
 
     def get_machine_with_least_linters(self) -> str:
         return min(self.machine_to_n_linters, key=self.machine_to_n_linters.get)
-    
-    def start_linters(self, request: StartLintersRequest) -> str:
+
+    def start_linters(self, request: StartLintersRequest):
         for i in range(request.n_instances):
             machine = self.get_machine_with_least_linters()
             self.start_linter_instance(request.linter_name, request.linter_version, machine)
@@ -191,8 +190,7 @@ class MachineManager:
     def rollout(self, request: RolloutRequest):
         if request.traffic_percent_to_new_version == 100:
             self.linter_name_to_curr_version[request.linter_name] = request.new_version
-            self.load_balancer_client.rollout(request)
-
+        self.load_balancer_client.rollout(request)
 
     # rollback instantly changes current version to version given in request
     # and makes load_balancer cancel rollout

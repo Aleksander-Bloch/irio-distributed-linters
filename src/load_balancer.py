@@ -39,13 +39,8 @@ class TrafficData:
     # also updates send_to_new or sent_to_old
     def should_send_to_new(self, desired_percent: float) -> bool:
         if self.sent_to_old + self.sent_to_new == 0:
-            return True
-        is_sent_to_new: bool = self.sent_to_new / (self.sent_to_old + self.sent_to_new) < desired_percent / 100
-        if is_sent_to_new:
-            self.sent_to_new += 1
-        else:
-            self.sent_to_old += 1
-        return is_sent_to_new
+            return False
+        return self.sent_to_new / (self.sent_to_old + self.sent_to_new) < desired_percent / 100
 
 
 class RolloutManager:
@@ -60,14 +55,16 @@ class RolloutManager:
     def is_rollout(self, linter_name):
         return linter_name in self.linter_name_to_rollout_data
 
-    def which_version_should_be_used(self, linter_name: str) -> str:
+    def choose_version(self, linter_name: str) -> str:
         rollout_data = self.linter_name_to_rollout_data[linter_name]
 
         desired_percent = rollout_data.traffic_percent_to_new_version
 
         if self.linter_name_to_traffic_data[linter_name].should_send_to_new(desired_percent):
+            self.linter_name_to_traffic_data[linter_name].sent_to_new += 1
             return rollout_data.new_version
         else:
+            self.linter_name_to_traffic_data[linter_name].sent_to_old += 1
             return rollout_data.old_version
 
     def end_rollout(self, linter_name: str):
@@ -138,7 +135,7 @@ class LoadBalancer:
         # manage rollout
         if self.rollout_manager.is_rollout(linter_name):
 
-            version = self.rollout_manager.which_version_should_be_used(linter_name)
+            version = self.rollout_manager.choose_version(linter_name)
             host_port = self.strategy.choose_linter_instance(self.get_linter_instances(linter_name, version))
         else:
             host_port = self.strategy.choose_linter_instance(self.get_linters_with_curr_version(linter_name))
@@ -190,9 +187,11 @@ async def lint_code_endpoint(request: LintingRequest):
 async def rollout_endpoint(request: RolloutRequest):
     if request.traffic_percent_to_new_version == 100:
         loadbalancer.rollout_manager.end_rollout(request.linter_name)
-    loadbalancer.rollout_manager.start_rollout(request.linter_name, RolloutData(request.old_version,
-                                                                                request.new_version,
-                                                                                request.traffic_percent_to_new_version))
+    else:
+        old = request.old_version
+        new = request.new_version
+        traffic = request.traffic_percent_to_new_version
+        loadbalancer.rollout_manager.start_rollout(request.linter_name, RolloutData(old, new, traffic))
 
 
 @app.post("/rollback/")

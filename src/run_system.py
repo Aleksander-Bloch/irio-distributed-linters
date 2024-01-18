@@ -23,7 +23,7 @@ def run_system(load_balancer_host="localhost", load_balancer_port="8000", machin
 
     # run machine management
     p_machine_management = subprocess.Popen(
-        ["python3", "machine_management.py", "-host", machine_management_host, "-port", machine_management_port,
+        ["python3", "machine_management_app.py", "-host", machine_management_host, "-port", machine_management_port,
          "-lba", load_balancer_addr])
 
     # run load balancer
