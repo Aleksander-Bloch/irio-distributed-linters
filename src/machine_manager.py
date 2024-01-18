@@ -174,7 +174,15 @@ class MachineManager:
             self.start_linter_instance(request.linter_name, request.linter_version, machine)
             self.machine_to_n_linters[machine] += 1
 
+    # if the percent to new version == 100 we end rollout and change current version
     def rollout(self, request: RolloutRequest):
         if request.traffic_percent_to_new_version == 100:
             self.linter_name_to_curr_version[request.linter_name] = request.new_version
             requests.post(f"{self.load_balancer_url}/rollout/", data=request)
+
+
+    # rollback instantly changes current version to version given in request
+    # and makes load_balancer cancel rollout
+    def rollback(self, linter_name, linter_version):
+        self.linter_name_to_curr_version[linter_name] = linter_version
+        requests.post(f"{self.load_balancer_url}/rollback/", params={"linter_name": linter_name})

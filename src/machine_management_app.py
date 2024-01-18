@@ -77,19 +77,14 @@ def create_app(load_balancer_url: str):
     async def start_linters(request: StartLintersRequest):
         return machine_manager.start_linters(request)
 
-    # if the percent to new version == 100 we end rollout and change current version
     @app.post("/rollout/")
     async def rollout(request: RolloutRequest):
         return machine_manager.rollout(request)
 
 
-    # rollback instantly changes current version to version given in request
-    # and makes load_balancer cancel rollout
     @app.post("/rollback/")
     async def rollback(linter_name: str, linter_version: str):
-        machine_manager.linter_name_to_curr_version[linter_name] = linter_version
-        requests.post(f"{machine_manager.load_balancer_url}/rollback/", params={"linter_name": linter_name})
-
+        return machine_manager.rollback(linter_name, linter_version)
 
     ########################
     # DEBUG ENDPOINTS
