@@ -211,6 +211,8 @@ def main():
     parsed_args = parser.parse_args()
     loadbalancer.machine_management_url = parsed_args.machine_management_address
 
+    print(parsed_args)
+
     uvicorn.run(app, port=int(parsed_args.port), host=parsed_args.host)
 
 

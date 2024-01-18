@@ -130,18 +130,18 @@ class MachineManager:
         self.linter_name_to_curr_version: Dict[str, str] = {}
 
     # for each added machine create container manager
-    def add_machine(self, ip_port: str) -> None:
-        container_manager = self.container_manager_factory(ip_port)
-        self.registered_machines.append(ip_port)
-        self.container_managers[ip_port] = container_manager
-        self.machine_to_n_linters[ip_port] = 0
-        logging.info(f"Added machine {ip_port}")
+    def add_machine(self, host: str) -> None:
+        container_manager = self.container_manager_factory(host)
+        self.registered_machines.append(host)
+        self.container_managers[host] = container_manager
+        self.machine_to_n_linters[host] = 0
+        logging.info(f"Added machine {host}")
 
-    def delete_machine(self, ip_port: str) -> None:
-        self.registered_machines.remove(ip_port)
-        self.container_managers.pop(ip_port)
-        self.machine_to_n_linters.pop(ip_port)
-        logging.info(f"Removed machine {ip_port}")
+    def delete_machine(self, host: str) -> None:
+        self.registered_machines.remove(host)
+        self.container_managers.pop(host)
+        self.machine_to_n_linters.pop(host)
+        logging.info(f"Removed machine {host}")
 
     def list_machines(self):
         return self.registered_machines
@@ -224,18 +224,18 @@ class MachineManager:
         self.running_linters.remove(linter_instance)
 
     def list_linters(self) -> List[LinterEndpoint]:
-        # hostport: get only ip from machine and add port to particular linter
+        # hostport: get only host from machine and add port to particular linter
         return [LinterEndpoint(hostport=linter.get_host_port(),
                                name=linter.linter_name,
                                version=linter.linter_version) for linter in self.running_linters]
 
     # returns list of host_ports of linter instances with linter_name and current version
     def list_linters_with_curr_version(self, linter_name: str):
-        return [linter.host_port for linter in self.running_linters if linter.linter_name == linter_name
+        return [linter.get_host_port() for linter in self.running_linters if linter.linter_name == linter_name
                 and linter.linter_version == self.linter_name_to_curr_version[linter_name]]
 
     def list_linters_instances(self, linter_name: str, linter_version: str):
-        return [linter.host_port for linter in self.running_linters if linter.linter_name == linter_name
+        return [linter.get_host_port() for linter in self.running_linters if linter.linter_name == linter_name
                 and linter.linter_version == linter_version]
 
     def get_machine_with_least_linters(self) -> str:
@@ -262,15 +262,22 @@ class RolloutRequest(BaseModel):
 
 
 # Machine management
+
+# Assumes admin will add machine with passwordless ssh set up
+
+class AddMachine(BaseModel):
+    host: str
+
+
 @app.post("/add_machine/")
-async def add_machine(ip_port: str):
+async def add_machine(request: AddMachine):
     print("got machine request")
-    return machine_manager.add_machine(ip_port)
+    return machine_manager.add_machine(request.host)
 
 
 @app.post("delete_machine/")
-async def delete_machine(ip_port: str):
-    return machine_manager.delete_machine(ip_port)
+async def delete_machine(host: str):
+    return machine_manager.delete_machine(host)
 
 
 @app.get("/list_machines/")
@@ -280,11 +287,17 @@ async def list_machines() -> List[str]:
 
 # Linter management
 
+class AddLinterRequest(BaseModel):
+    linter_name: str
+    linter_version: str
+    docker_image: str
+
+
 @app.post("/add_new_linter/")
-async def add_new_linter(linter_name: str, linter_version: str, docker_image: str):
+async def add_new_linter(request: AddLinterRequest):
     """Create a new linter, or update a linter to a new version."""
     print("got add new linter request")
-    return machine_manager.add_new_linter(linter_name, linter_version, docker_image)
+    machine_manager.add_new_linter(request.linter_name, request.linter_version, request.docker_image)
 
 
 @app.post("/remove_linter/")
@@ -308,11 +321,17 @@ async def list_linter_instances(linter_name: str, linter_version: str) -> List[s
     return machine_manager.list_linters_instances(linter_name, linter_version)
 
 
+class StartLintersRequest(BaseModel):
+    linter_name: str
+    linter_version: str
+    n_instances: int
+
+
 @app.post("/start_linters/")
-async def start_linters(linter_name: str, linter_version: str, n_instances: int):
-    for i in range(n_instances):
+async def start_linters(request: StartLintersRequest):
+    for i in range(request.n_instances):
         machine = machine_manager.get_machine_with_least_linters()
-        machine_manager.start_linter_instance(linter_name, linter_version, machine)
+        machine_manager.start_linter_instance(request.linter_name, request.linter_version, machine)
         machine_manager.machine_to_n_linters[machine] += 1
 
 
@@ -336,8 +355,8 @@ async def rollback(linter_name: str, linter_version: str):
 # DEBUG ENDPOINTS
 ########################
 @app.post("/unsafe_start_linter/")  # debug and admin intervention, works for previously added linter
-async def start_linter(linter_name: str, linter_version: str, machine: str) -> Tuple[str, int]:
-    return machine_manager.start_linter_instance(linter_name, linter_version, machine)
+async def start_linter(linter_name: str, linter_version: str, host: str) -> Tuple[str, int]:
+    return machine_manager.start_linter_instance(linter_name, linter_version, host)
 
 
 @app.post("/unsafe_stop_linter/")  # debug and admin intervention
