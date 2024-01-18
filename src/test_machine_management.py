@@ -1,7 +1,7 @@
 import pytest
 
 from fastapi.testclient import TestClient
-from machine_management import create_app
+from machine_management_app import create_app
 
 @pytest.fixture
 def fresh_app():
