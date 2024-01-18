@@ -46,8 +46,12 @@ class RolloutRequest(BaseModel):
 class MachineManager:
 
     def __init__(self, container_manager_factory: Callable[[str], ContainerManager],
-                 load_balancer_url):
+                 load_balancer_rollout_callback: Callable[[RolloutRequest], None],
+                 load_balancer_rollback_callback: Callable[[str], None]):
         self.container_manager_factory = container_manager_factory
+        self.load_balancer_rollout_callback = load_balancer_rollout_callback
+        self.load_balancer_rollback_callback = load_balancer_rollback_callback
+        
         self.registered_machines = []
 
         self.container_managers: Dict[str, ContainerManager] = {}
@@ -60,7 +64,7 @@ class MachineManager:
         # (linter_name, linter_version) -> docker image
         self.linter_images: Dict[Tuple[str, str], str] = {}
 
-        self.load_balancer_url = load_balancer_url
+
 
         self.linter_name_to_curr_version: Dict[str, str] = {}
 
@@ -178,11 +182,11 @@ class MachineManager:
     def rollout(self, request: RolloutRequest):
         if request.traffic_percent_to_new_version == 100:
             self.linter_name_to_curr_version[request.linter_name] = request.new_version
-            requests.post(f"{self.load_balancer_url}/rollout/", data=request)
+            self.load_balancer_rollout_callback(request)
 
 
     # rollback instantly changes current version to version given in request
     # and makes load_balancer cancel rollout
     def rollback(self, linter_name, linter_version):
         self.linter_name_to_curr_version[linter_name] = linter_version
-        requests.post(f"{self.load_balancer_url}/rollback/", params={"linter_name": linter_name})
+        self.load_balancer_rollback_callback(linter_version)

@@ -11,15 +11,21 @@ from pydantic import BaseModel
 from machine_manager import LinterEndpoint, MachineManager, RegisterLinterData, RolloutRequest, StartLintersRequest
 from container_manager import SSHContainerManager
 
-def create_app(load_balancer_url: str):
+def get_load_balancer_rollout_callback(load_balancer_url):
+    def callback(request):
+        requests.post(f"{load_balancer_url}/rollout/", data=request)
+    return callback
+
+def get_load_balancer_rollback_callback(load_balancer_url):
+    def callback(linter_name):
+        requests.post(f"{load_balancer_url}/rollback/", params={"linter_name": linter_name})
+    return callback
+
+def create_app(load_balancer_rollout_callback, load_balancer_rollback_callback):
     app = FastAPI()
-
     machine_manager = MachineManager(container_manager_factory=SSHContainerManager,
-                                     load_balancer_url=load_balancer_url)
-
-    # Machine management
-
-    # Assumes admin will add machine with passwordless ssh set up
+                                     load_balancer_rollback_callback=load_balancer_rollback_callback,
+                                     load_balancer_rollout_callback=load_balancer_rollout_callback)
 
     class AddMachine(BaseModel):
         host: str
@@ -108,7 +114,11 @@ def main():
     parser.add_argument('-port', '--port')
     parser.add_argument('-lba', '--load_balancer_address')
     parsed_args = parser.parse_args()
-    app = create_app(load_balancer_url=parsed_args.load_balancer_address)
+
+    load_balancer_url = parsed_args.load_balancer_address
+    load_balancer_rollout_callback = get_load_balancer_rollout_callback(load_balancer_url)
+    load_balancer_rollback_callback = get_load_balancer_rollback_callback(load_balancer_url)
+    app = create_app(load_balancer_rollout_callback, load_balancer_rollback_callback)
 
     uvicorn.run(app, port=int(parsed_args.port), host=parsed_args.host)
 

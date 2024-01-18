@@ -5,7 +5,13 @@ from machine_management_app import create_app
 
 @pytest.fixture
 def fresh_app():
-    return create_app("no_load_balancer") #This breaks dependencies on load balancer
+    def load_balancer_rollback_callback(*args):
+        raise NotImplementedError()
+    
+    def load_balancer_rollout_callback(*args):
+        raise NotImplementedError()
+    return create_app(load_balancer_rollout_callback=load_balancer_rollout_callback,
+                      load_balancer_rollback_callback=load_balancer_rollback_callback) #This breaks dependencies on load balancer
 
 @pytest.fixture
 def fresh_client(fresh_app):
