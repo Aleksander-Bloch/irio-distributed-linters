@@ -194,6 +194,8 @@ class MachineManager:
 
     # rollback instantly changes current version to version given in request
     # and makes load_balancer cancel rollout
-    def rollback(self, linter_name, linter_version):
-        self.linter_name_to_curr_version[linter_name] = linter_version
-        self.load_balancer_client.rollback(linter_version)
+    # if the version is not specified rollback to current version
+    def rollback(self, linter_name, linter_version=None):
+        if linter_version is not None:
+            self.linter_name_to_curr_version[linter_name] = linter_version
+        self.load_balancer_client.rollback(linter_name)
