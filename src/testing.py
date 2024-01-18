@@ -108,6 +108,19 @@ def test_linting():
     print(response.status_code)
 
 
+def collect_concurrent_linting_responses(linter_name: str, code: str, n_requests: int):
+    responses = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n_requests) as executor:
+        futures = [executor.submit(lint_code_helper, linter_name, code) for _ in range(n_requests)]
+        for future in concurrent.futures.as_completed(futures):
+            response = future.result()
+            assert response.status_code == 200
+            responses.append(response)
+
+    return responses
+
+
 @run_stop_system
 def test_multiple_linting():
     add_machine_with_linter_helper("localhost", "no_semicolons", "v0", "ghcr.io/chedatomasz/no_semicolons:v0")
@@ -125,7 +138,7 @@ def test_multiple_linting():
 
 
 @run_stop_system
-def test_rollout():
+def test_rollout_sequential():
     add_machine_with_linter_helper("localhost", "no_semicolons", "v0", "ghcr.io/chedatomasz/no_semicolons:v0")
 
     # add and start new linter with same name, but different version
@@ -150,7 +163,6 @@ def test_rollout():
         response = lint_code_helper("no_semicolons", code)
         responses.append(literal_eval(response.content.decode('utf-8')))
 
-
     for r in responses:
         print(r)
 
@@ -158,7 +170,36 @@ def test_rollout():
     assert responses.count(expected_response_for_v0) == round(n_requests * (100 - percent_to_new_version) / 100)
 
 
+@run_stop_system
+def test_rollout_concurrent():
+    add_machine_with_linter_helper("localhost", "no_semicolons", "v0", "ghcr.io/chedatomasz/no_semicolons:v0")
+
+    # add and start new linter with same name, but different version
+    add_and_start_linter("no_semicolons", "v1", "ghcr.io/chedatomasz/no_semicolons:v1")
+
+    percent_to_new_version = 20
+
+    # init rollout
+    response = rollout_helper("no_semicolons", "v0", "v1", percent_to_new_version)
+    assert response.status_code == 200
+
+    code = "#saf;dsaflaksfdjaslf"
+
+    expected_response_for_v0 = {'status_code': 1, 'message': 'ERROR: found semicolon in line 0 at position 4'}
+    expected_response_for_v1 = {'status_code': 0, 'message': 'CORRECT: no redundant semicolons in code'}
+
+    n_requests = 10
+
+    responses = collect_concurrent_linting_responses("no_semicolons", code, n_requests)
+
+    parsed_responses = [literal_eval(r.content.decode('utf-8')) for r in responses]
+
+    for r in parsed_responses:
+        print(r)
+
+    assert parsed_responses.count(expected_response_for_v1) == round(n_requests * percent_to_new_version / 100)
+    assert parsed_responses.count(expected_response_for_v0) == round(n_requests * (100 - percent_to_new_version) / 100)
 
 
 if __name__ == "__main__":
-    test_rollout()
+    test_rollout_concurrent()
