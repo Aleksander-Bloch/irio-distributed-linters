@@ -6,8 +6,19 @@ import logging
 from typing import Callable, Dict, List, Tuple
 
 
+class LoadBalancerClient:
+    def __init__(self, load_balancer_url):
+        self.load_balancer_url = load_balancer_url
+
+    def rollout(self, request):
+        requests.post(f"{self.load_balancer_url}/rollout/", data=request)
+
+    def rollback(self, linter_name):
+        requests.post(f"{self.load_balancer_url}/rollback/", params={"linter_name": linter_name}) 
+
+
 class RunningLinter(BaseModel):
-    machine: str
+    machine: str #TODO change to only have machine host, no port
     container_name: str
     linter_version: str
     linter_name: str
@@ -46,11 +57,9 @@ class RolloutRequest(BaseModel):
 class MachineManager:
 
     def __init__(self, container_manager_factory: Callable[[str], ContainerManager],
-                 load_balancer_rollout_callback: Callable[[RolloutRequest], None],
-                 load_balancer_rollback_callback: Callable[[str], None]):
+                 load_balancer_client: LoadBalancerClient):
         self.container_manager_factory = container_manager_factory
-        self.load_balancer_rollout_callback = load_balancer_rollout_callback
-        self.load_balancer_rollback_callback = load_balancer_rollback_callback
+        self.load_balancer_client = load_balancer_client
         
         self.registered_machines = []
 
@@ -182,11 +191,11 @@ class MachineManager:
     def rollout(self, request: RolloutRequest):
         if request.traffic_percent_to_new_version == 100:
             self.linter_name_to_curr_version[request.linter_name] = request.new_version
-            self.load_balancer_rollout_callback(request)
+            self.load_balancer_client.rollout(request)
 
 
     # rollback instantly changes current version to version given in request
     # and makes load_balancer cancel rollout
     def rollback(self, linter_name, linter_version):
         self.linter_name_to_curr_version[linter_name] = linter_version
-        self.load_balancer_rollback_callback(linter_version)
+        self.load_balancer_client.rollback(linter_version)

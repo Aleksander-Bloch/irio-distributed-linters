@@ -1,17 +1,15 @@
 import pytest
-
+from unittest.mock import Mock
 from fastapi.testclient import TestClient
 from machine_management_app import create_app
 
 @pytest.fixture
 def fresh_app():
-    def load_balancer_rollback_callback(*args):
-        raise NotImplementedError()
-    
-    def load_balancer_rollout_callback(*args):
-        raise NotImplementedError()
-    return create_app(load_balancer_rollout_callback=load_balancer_rollout_callback,
-                      load_balancer_rollback_callback=load_balancer_rollback_callback) #This breaks dependencies on load balancer
+    load_balancer_client = Mock()
+    load_balancer_client.rollout.return_value = None
+    load_balancer_client.rollback.return_value = None
+
+    return create_app(load_balancer_client=load_balancer_client) #This breaks dependencies on load balancer
 
 @pytest.fixture
 def fresh_client(fresh_app):

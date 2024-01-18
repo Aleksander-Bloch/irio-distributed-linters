@@ -3,29 +3,16 @@ import logging
 import sys
 from typing import List, Tuple
 
-import requests
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from machine_manager import LinterEndpoint, MachineManager, RegisterLinterData, RolloutRequest, StartLintersRequest
+from machine_manager import LoadBalancerClient, LinterEndpoint, MachineManager, RegisterLinterData, RolloutRequest, StartLintersRequest
 from container_manager import SSHContainerManager
 
-def get_load_balancer_rollout_callback(load_balancer_url):
-    def callback(request):
-        requests.post(f"{load_balancer_url}/rollout/", data=request)
-    return callback
-
-def get_load_balancer_rollback_callback(load_balancer_url):
-    def callback(linter_name):
-        requests.post(f"{load_balancer_url}/rollback/", params={"linter_name": linter_name})
-    return callback
-
-def create_app(load_balancer_rollout_callback, load_balancer_rollback_callback):
+def create_app(load_balancer_client):
     app = FastAPI()
-    machine_manager = MachineManager(container_manager_factory=SSHContainerManager,
-                                     load_balancer_rollback_callback=load_balancer_rollback_callback,
-                                     load_balancer_rollout_callback=load_balancer_rollout_callback)
+    machine_manager = MachineManager(load_balancer_client=load_balancer_client,container_manager_factory=SSHContainerManager)
 
     class AddMachine(BaseModel):
         host: str
@@ -115,10 +102,9 @@ def main():
     parser.add_argument('-lba', '--load_balancer_address')
     parsed_args = parser.parse_args()
 
-    load_balancer_url = parsed_args.load_balancer_address
-    load_balancer_rollout_callback = get_load_balancer_rollout_callback(load_balancer_url)
-    load_balancer_rollback_callback = get_load_balancer_rollback_callback(load_balancer_url)
-    app = create_app(load_balancer_rollout_callback, load_balancer_rollback_callback)
+    load_balancer_client = LoadBalancerClient(load_balancer_url=parsed_args.load_balancer_address)
+    
+    app = create_app(load_balancer_client = load_balancer_client)
 
     uvicorn.run(app, port=int(parsed_args.port), host=parsed_args.host)
 
