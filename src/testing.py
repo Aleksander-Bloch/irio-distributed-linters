@@ -55,7 +55,7 @@ def add_machine_helper(host):
 
 def add_linter_helper(name, version, docker_image):
     add_linter_request = {"linter_name": name, "linter_version": version, "docker_image": docker_image}
-    return requests.post(f"{machine_management_addr}/add_new_linter/", json=add_linter_request)
+    return requests.post(f"{machine_management_addr}/register_linter/", json=add_linter_request)
 
 
 def start_linters_helper(name, version, n_instances=1):

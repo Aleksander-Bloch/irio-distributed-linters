@@ -111,7 +111,8 @@ class LinterEndpoint(BaseModel):
 
 class MachineManager:
 
-    def __init__(self, container_manager_factory: Callable[[str], ContainerManager]):
+    def __init__(self, container_manager_factory: Callable[[str], ContainerManager],
+                 load_balancer_url):
         self.container_manager_factory = container_manager_factory
         self.registered_machines = []
 
@@ -125,11 +126,13 @@ class MachineManager:
         # (linter_name, linter_version) -> docker image
         self.linter_images: Dict[Tuple[str, str], str] = {}
 
-        self.load_balancer_url = ""
+        self.load_balancer_url = load_balancer_url
 
         self.linter_name_to_curr_version: Dict[str, str] = {}
 
-    # for each added machine create container manager
+    #############
+    # MACHINES
+    #############
     def add_machine(self, host: str) -> None:
         container_manager = self.container_manager_factory(host)
         self.registered_machines.append(host)
@@ -146,29 +149,13 @@ class MachineManager:
     def list_machines(self):
         return self.registered_machines
 
-    def add_new_linter(self, linter_name, linter_version, docker_image):
 
+    #############
+    # LINTER VERSIONS
+    #############
+    def register_linter(self, linter_name, linter_version, docker_image):
         self.linter_images[linter_name, linter_version] = docker_image
-
-        # is_update = False
-        # for linter in self.running_linters:
-        #     if linter.linter_name == linter_name:
-        #         logging.debug(f"Detected previous version of linter {linter_name}")
-        #         is_update = True
-        #         break
-        #
-        # if is_update:
-        #     logging.info(f"Updating linter {linter_name} to version {linter_version}")
-        #     # Logic for staged update goes here.
-        #     raise NotImplementedError
-        # else:
-        #     logging.info(f"Creating first version of linter {linter_name}")
-        #     # TODO have a smarter placement algorithm, maybe strategy?
-        #     # because for now we start linter instance on every machine available
-        #     if not self.registered_machines:
-        #         raise ValueError("No machines available to run linter")
-        #     for machine in self.registered_machines:
-        #         self.start_linter_instance(linter_name, linter_version, machine)
+        logging.info("Registered linter {linter_name} in version {linter_version}")
 
     def remove_linter(self, linter_name, linter_version):
         """Kill all linter instances and deregister"""
@@ -188,6 +175,12 @@ class MachineManager:
         # for v in versions:
         #     self.linter_images.pop((linter_name, v))
 
+    def list_registered_linters(self):
+        return[RegisterLinterData(linter_name=name, linter_version = version, docker_image=image) for (name,version), image in self.linter_images.items()]
+
+    #############
+    # LINTER INSTANCES
+    #############
     def start_linter_instance(self, linter_name, linter_version, machine) -> Tuple[str, int]:
         """Start a new instance of a given registered linter"""
         logging.info(f"Starting linter {linter_name} v {linter_version} instance on {machine}")
@@ -247,78 +240,16 @@ class MachineManager:
 # FASTAPI-SPECIFIC CODE
 
 ############################
-app = FastAPI()
-
-machine_manager = MachineManager(container_manager_factory=SSHContainerManager)
-
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-
-
 class RolloutRequest(BaseModel):
     linter_name: str
     old_version: str
     new_version: str
     traffic_percent_to_new_version: float
 
-
-# Machine management
-
-# Assumes admin will add machine with passwordless ssh set up
-
-class AddMachine(BaseModel):
-    host: str
-
-
-@app.post("/add_machine/")
-async def add_machine(request: AddMachine):
-    print("got machine request")
-    return machine_manager.add_machine(request.host)
-
-
-@app.post("delete_machine/")
-async def delete_machine(host: str):
-    return machine_manager.delete_machine(host)
-
-
-@app.get("/list_machines/")
-async def list_machines() -> List[str]:
-    return machine_manager.list_machines()
-
-
-# Linter management
-
-class AddLinterRequest(BaseModel):
+class RegisterLinterData(BaseModel):
     linter_name: str
     linter_version: str
     docker_image: str
-
-
-@app.post("/add_new_linter/")
-async def add_new_linter(request: AddLinterRequest):
-    """Create a new linter, or update a linter to a new version."""
-    print("got add new linter request")
-    machine_manager.add_new_linter(request.linter_name, request.linter_version, request.docker_image)
-
-
-@app.post("/remove_linter/")
-async def remove_linter(linter_name: str, linter_version: str):
-    """Remove all running versions of a given linter"""
-    return machine_manager.remove_linter(linter_name, linter_version)
-
-
-@app.get("/list_linters/")
-async def list_linters() -> List[LinterEndpoint]:
-    return machine_manager.list_linters()
-
-
-@app.get("/list_linters_with_curr_version/")
-async def list_linters_with_curr_version(linter_name: str) -> List[str]:
-    return machine_manager.list_linters_with_curr_version(linter_name)
-
-
-@app.get("/list_linter_instances/")
-async def list_linter_instances(linter_name: str, linter_version: str) -> List[str]:
-    return machine_manager.list_linters_instances(linter_name, linter_version)
 
 
 class StartLintersRequest(BaseModel):
@@ -326,52 +257,115 @@ class StartLintersRequest(BaseModel):
     linter_version: str
     n_instances: int
 
+def create_app(load_balancer_url: str):
+    app = FastAPI()
 
-@app.post("/start_linters/")
-async def start_linters(request: StartLintersRequest):
-    for i in range(request.n_instances):
-        machine = machine_manager.get_machine_with_least_linters()
-        machine_manager.start_linter_instance(request.linter_name, request.linter_version, machine)
-        machine_manager.machine_to_n_linters[machine] += 1
+    machine_manager = MachineManager(container_manager_factory=SSHContainerManager,
+                                     load_balancer_url=load_balancer_url)
 
+    # Machine management
 
-# if the percent to new version == 100 we end rollout and change current version
-@app.post("/rollout/")
-async def rollout(request: RolloutRequest):
-    if request.traffic_percent_to_new_version == 100:
-        machine_manager.linter_name_to_curr_version[request.linter_name] = request.new_version
-    requests.post(f"{machine_manager.load_balancer_url}/rollout/", data=request)
+    # Assumes admin will add machine with passwordless ssh set up
+
+    class AddMachine(BaseModel):
+        host: str
 
 
-# rollback instantly changes current version to version given in request
-# and makes load_balancer cancel rollout
-@app.post("/rollback/")
-async def rollback(linter_name: str, linter_version: str):
-    machine_manager.linter_name_to_curr_version[linter_name] = linter_version
-    requests.post(f"{machine_manager.load_balancer_url}/rollback/", params={"linter_name": linter_name})
+    @app.post("/add_machine/")
+    async def add_machine(request: AddMachine):
+        print("got machine request")
+        return machine_manager.add_machine(request.host)
 
 
-########################
-# DEBUG ENDPOINTS
-########################
-@app.post("/unsafe_start_linter/")  # debug and admin intervention, works for previously added linter
-async def start_linter(linter_name: str, linter_version: str, host: str) -> Tuple[str, int]:
-    return machine_manager.start_linter_instance(linter_name, linter_version, host)
+    @app.post("delete_machine/")
+    async def delete_machine(host: str):
+        return machine_manager.delete_machine(host)
 
 
-@app.post("/unsafe_stop_linter/")  # debug and admin intervention
-async def stop_linter(machine: str, container_name: str):
-    return machine_manager.stop_linter_instance(machine, container_name)
+    @app.get("/list_machines/")
+    async def list_machines() -> List[str]:
+        return machine_manager.list_machines()
+
+
+    # Linter management
+
+    @app.post("/register_linter/")
+    async def register_linter(request: RegisterLinterData):
+        """Register a new linter or a new version, but without starting any instances."""
+        machine_manager.register_linter(request.linter_name, request.linter_version, request.docker_image)
+
+
+    @app.post("/remove_linter/")
+    async def remove_linter(linter_name: str, linter_version: str):
+        """Remove all running versions of a given linter"""
+        return machine_manager.remove_linter(linter_name, linter_version)
+
+    @app.get("/list_registered_linters/")
+    async def list_registered_linters() -> List[RegisterLinterData]:
+        """List all registered linters and versions"""
+        return machine_manager.list_registered_linters()
+
+    @app.get("/list_linters/")
+    async def list_linters() -> List[LinterEndpoint]:
+        return machine_manager.list_linters()
+
+
+    @app.get("/list_linters_with_curr_version/")
+    async def list_linters_with_curr_version(linter_name: str) -> List[str]:
+        return machine_manager.list_linters_with_curr_version(linter_name)
+
+
+    @app.get("/list_linter_instances/")
+    async def list_linter_instances(linter_name: str, linter_version: str) -> List[str]:
+        return machine_manager.list_linters_instances(linter_name, linter_version)
+
+    @app.post("/start_linters/")
+    async def start_linters(request: StartLintersRequest):
+        for i in range(request.n_instances):
+            machine = machine_manager.get_machine_with_least_linters()
+            machine_manager.start_linter_instance(request.linter_name, request.linter_version, machine)
+            machine_manager.machine_to_n_linters[machine] += 1
+
+
+    # if the percent to new version == 100 we end rollout and change current version
+    @app.post("/rollout/")
+    async def rollout(request: RolloutRequest):
+        if request.traffic_percent_to_new_version == 100:
+            machine_manager.linter_name_to_curr_version[request.linter_name] = request.new_version
+        requests.post(f"{machine_manager.load_balancer_url}/rollout/", data=request)
+
+
+    # rollback instantly changes current version to version given in request
+    # and makes load_balancer cancel rollout
+    @app.post("/rollback/")
+    async def rollback(linter_name: str, linter_version: str):
+        machine_manager.linter_name_to_curr_version[linter_name] = linter_version
+        requests.post(f"{machine_manager.load_balancer_url}/rollback/", params={"linter_name": linter_name})
+
+
+    ########################
+    # DEBUG ENDPOINTS
+    ########################
+    @app.post("/unsafe_start_linter/")  # debug and admin intervention, works for previously added linter
+    async def start_linter(linter_name: str, linter_version: str, host: str) -> Tuple[str, int]:
+        return machine_manager.start_linter_instance(linter_name, linter_version, host)
+
+
+    @app.post("/unsafe_stop_linter/")  # debug and admin intervention
+    async def stop_linter(machine: str, container_name: str):
+        return machine_manager.stop_linter_instance(machine, container_name)
+
+    return app
 
 
 def main():
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     parser = argparse.ArgumentParser()
     parser.add_argument('-host', '--host')
     parser.add_argument('-port', '--port')
     parser.add_argument('-lba', '--load_balancer_address')
     parsed_args = parser.parse_args()
-
-    machine_manager.load_balancer_url = parsed_args.load_balancer_address
+    app = create_app(load_balancer_url=parsed_args.load_balancer_address)
 
     uvicorn.run(app, port=int(parsed_args.port), host=parsed_args.host)
 

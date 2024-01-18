@@ -56,7 +56,7 @@ def add_new_linter(management_url, linter_name, linter_version, docker_image):
         'linter_version': linter_version,
         'docker_image': docker_image
     }
-    response = requests.post(f"{management_url}/add_new_linter/", params=params)
+    response = requests.post(f"{management_url}/register_linter/", params=params)
 
     if response.status_code == 200:
         print("Linter added successfully!")
