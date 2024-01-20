@@ -1,3 +1,4 @@
+import threading
 import time
 
 from pydantic import BaseModel
@@ -90,6 +91,10 @@ class MachineManager:
         self.linter_images: Dict[Tuple[str, str], str] = {}
 
         self.linter_name_to_curr_version: Dict[str, str] = {}
+
+        self.rollout_lock = threading.Lock()
+        # tells if there is auto rollout active for current linter
+        self.linter_name_to_auto_rollout: Dict[str, bool] = {}
 
     #############
     # MACHINES
@@ -212,18 +217,30 @@ class MachineManager:
         self.load_balancer_client.rollout(request)
 
     def auto_rollout(self, request: AutoRolloutRequest):
-
         name = request.linter_name
         old_version = request.old_version
         new_version = request.new_version
         time_steps = request.time_steps
         traffic_steps = request.traffic_percent_steps
 
+        self.rollout_lock.acquire()
+        self.linter_name_to_auto_rollout[name] = True
+        self.rollout_lock.release()
+
         for curr_time_step, curr_traffic_step in zip(time_steps, traffic_steps):
             time.sleep(curr_time_step)
-            # TODO check if not rollback
-            self.rollout(RolloutRequest(linter_name=name, old_version=old_version, new_version=new_version,
-                                        traffic_percent_to_new_version=curr_traffic_step))
+
+            self.rollout_lock.acquire()
+
+            stop_rollout = not self.linter_name_to_auto_rollout.pop(name, False)
+
+            if not stop_rollout:
+                self.rollout(RolloutRequest(linter_name=name, old_version=old_version, new_version=new_version,
+                                            traffic_percent_to_new_version=curr_traffic_step))
+            self.rollout_lock.release()
+
+            if stop_rollout:
+                return
 
     # rollback instantly changes current version to version given in request
     # and makes load_balancer cancel rollout
@@ -231,4 +248,9 @@ class MachineManager:
     def rollback(self, linter_name, linter_version=None):
         if linter_version is not None:
             self.linter_name_to_curr_version[linter_name] = linter_version
+
+        self.rollout_lock.acquire()
+        # does not have effect if there is no automatic rollout
+        self.linter_name_to_auto_rollout.pop(linter_name, "accept absence of key")
         self.load_balancer_client.rollback(linter_name)
+        self.rollout_lock.release()
