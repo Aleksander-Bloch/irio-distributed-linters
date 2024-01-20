@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+// Interface exported by all linters.
+service Linter {
+  rpc LintCode(LintingRequest) returns (LintingResult) {}
+}
+
+message LintingRequest {
+    string code = 1;
+}
+
+message LintingResult {
+    int32 status = 1;
+    string comment = 2;
+}

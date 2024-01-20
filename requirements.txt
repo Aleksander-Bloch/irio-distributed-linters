@@ -1,0 +1,6 @@
+fastapi[all]
+grpcio
+grpcio-tools
+requests
+pydantic
+pytest
