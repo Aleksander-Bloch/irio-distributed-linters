@@ -57,7 +57,7 @@ class RolloutRequest(BaseModel):
     traffic_percent_to_new_version: float
 
 
-class AutoRolloutRequest:
+class AutoRolloutRequest(BaseModel):
     linter_name: str
     old_version: str
     new_version: str
@@ -211,7 +211,7 @@ class MachineManager:
             self.linter_name_to_curr_version[request.linter_name] = request.new_version
         self.load_balancer_client.rollout(request)
 
-    async def auto_rollout(self, request: AutoRolloutRequest):
+    def auto_rollout(self, request: AutoRolloutRequest):
 
         name = request.linter_name
         old_version = request.old_version
@@ -221,6 +221,7 @@ class MachineManager:
 
         for curr_time_step, curr_traffic_step in zip(time_steps, traffic_steps):
             time.sleep(curr_time_step)
+            # TODO check if not rollback
             self.rollout(RolloutRequest(linter_name=name, old_version=old_version, new_version=new_version,
                                         traffic_percent_to_new_version=curr_traffic_step))
 

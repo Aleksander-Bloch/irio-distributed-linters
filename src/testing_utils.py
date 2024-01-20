@@ -4,6 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 
+def assert200(response):
+    assert response.status_code == 200
+
 class TestingUtils:
     load_balancer_port = "8000"
     machine_management_port = "8001"
@@ -39,6 +42,10 @@ class TestingUtils:
                            "traffic_percent_to_new_version": traffic_percent_to_new_version}
 
         return requests.post(f"{cls.machine_management_addr}/rollout/", json=rollout_request)
+
+    @classmethod
+    def auto_rollout(cls, auto_rollout_request: dict):
+        return requests.post(f"{cls.machine_management_addr}/auto_rollout/", json=auto_rollout_request)
 
     @classmethod
     def rollback(cls, linter_name: str, linter_version=None):

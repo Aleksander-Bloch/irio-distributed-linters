@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sys
+import threading
 from typing import List, Tuple, Optional
 
 import uvicorn
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from machine_manager import LoadBalancerClient, LinterEndpoint, MachineManager, RegisterLinterData, RolloutRequest, \
     StartLintersRequest, AutoRolloutRequest
 from container_manager import SSHContainerManager
+import threading
 
 
 def create_app(load_balancer_client):
@@ -70,11 +72,12 @@ def create_app(load_balancer_client):
     async def rollout(request: RolloutRequest):
         return machine_manager.rollout(request)
 
-
-
     @app.post("/auto_rollout/")
     async def auto_rollout(request: AutoRolloutRequest):
-        return machine_manager.auto_rollout(request)
+        auto_rollout_thread = threading.Thread(target=machine_manager.auto_rollout, args=(request,))
+        auto_rollout_thread.start()
+        # return with status 200 after auto rollout is initialized
+        return
 
     @app.post("/rollback/")
     async def rollback(linter_name: str, linter_version: str | None = None):

@@ -1,3 +1,5 @@
+import unittest
+import math
 from ast import literal_eval
 from concurrent.futures import ThreadPoolExecutor
 
@@ -33,6 +35,26 @@ def add_and_start_linter(linter_name, linter_version, linter_image):
 
     response = TestingUtils.start_linters(linter_name, linter_version)
     assert response.status_code == 200
+
+
+def check_traffic_percentage(code: str, expected_result_old: dict, expected_result_new: dict, linter_name: str,
+                             expected_traffic: int):
+    divisor = math.gcd(expected_traffic, 100)
+    n_requests = 100 // divisor
+    n_expected_to_new = expected_traffic // divisor
+    n_expected_to_old = n_requests - n_expected_to_new
+    responses = TestingUtils.collect_concurrent_linting_responses(linter_name, code, n_requests)
+
+    for r in responses:
+        assert r.status_code == 200
+
+    parsed_responses = [literal_eval(r.content.decode('utf-8')) for r in responses]
+
+    assert parsed_responses.count(
+        expected_result_new) == n_expected_to_new, f"{parsed_responses.count(expected_result_new)} != {n_expected_to_new}"
+
+    assert parsed_responses.count(
+        expected_result_old) == n_expected_to_old, f"{parsed_responses.count(expected_result_old)} != {n_expected_to_old}"
 
 
 def run_stop_system(func):
@@ -191,5 +213,31 @@ def test_rollback():
     assert parsed_responses.count(expected_response_for_v0) == n_requests
 
 
+@run_stop_system
+def test_auto_rollout():
+    linter_name = "no_semicolons"
+    old_version = "v0"
+    new_version = "v1"
+    code = "#saf;dsaflaksfdjaslf"
+    add_machine_with_linter("localhost", linter_name, "v0", "ghcr.io/chedatomasz/no_semicolons:v0")
+    add_and_start_linter(linter_name, "v1", "ghcr.io/chedatomasz/no_semicolons:v1")
+
+    expected_response_for_v0 = {'status_code': 1, 'message': 'ERROR: found semicolon in line 0 at position 4'}
+    expected_response_for_v1 = {'status_code': 0, 'message': 'CORRECT: no redundant semicolons in code'}
+
+    auto_rollout_request = {"linter_name": linter_name, "old_version": old_version, "new_version": new_version,
+                            "time_steps": [5, 10, 6], "traffic_percent_steps": [10, 50, 100]}
+
+    assert200(TestingUtils.auto_rollout(auto_rollout_request))
+
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 0)
+    time.sleep(6)
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 10)
+    time.sleep(10)
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 50)
+    time.sleep(6)
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 100)
+
+
 if __name__ == "__main__":
-    test_rollback()
+    test_auto_rollout()
