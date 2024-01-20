@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from machine_manager import LoadBalancerClient, LinterEndpoint, MachineManager, RegisterLinterData, RolloutRequest, \
-    StartLintersRequest
+    StartLintersRequest, AutoRolloutRequest
 from container_manager import SSHContainerManager
 
 
@@ -69,6 +69,12 @@ def create_app(load_balancer_client):
     @app.post("/rollout/")
     async def rollout(request: RolloutRequest):
         return machine_manager.rollout(request)
+
+
+
+    @app.post("/auto_rollout/")
+    async def auto_rollout(request: AutoRolloutRequest):
+        return machine_manager.auto_rollout(request)
 
     @app.post("/rollback/")
     async def rollback(linter_name: str, linter_version: str | None = None):

@@ -1,3 +1,5 @@
+import time
+
 from pydantic import BaseModel
 from container_manager import ContainerManager
 
@@ -18,7 +20,8 @@ class LoadBalancerClient:
 
 
 class RunningLinter(BaseModel):
-    machine: str  # TODO change to only have machine host, no port
+    # machine means only host not port, because we connect by ssh using default ssh port
+    machine: str
     container_name: str
     linter_version: str
     linter_name: str
@@ -52,6 +55,19 @@ class RolloutRequest(BaseModel):
     old_version: str
     new_version: str
     traffic_percent_to_new_version: float
+
+
+class AutoRolloutRequest:
+    linter_name: str
+    old_version: str
+    new_version: str
+
+    # time_steps[i] indicates the time we should wait before rollout stage traffic_percent_steps[i]
+    # (time from previous rollout stage in seconds)
+    time_steps: List[int]
+
+    # indicates percent send to new version in nth rollout stage
+    traffic_percent_steps: List[int]
 
 
 class MachineManager:
@@ -111,7 +127,6 @@ class MachineManager:
         running_instances = [linter for linter in self.running_linters if
                              linter.linter_name == linter_name and linter.linter_version == linter_version]
         for linter in running_instances:
-            self.machine_to_n_linters[linter.machine] -= 1
             self.stop_linter_instance(linter.machine, linter.container_name)
 
         # remove docker images of all versions of linter with [linter_name]
@@ -148,6 +163,10 @@ class MachineManager:
                                         exposed_port=port)
 
         self.running_linters.append(linter_instance)
+
+        # If we appended a new running linter we can safely increase this dict
+        self.machine_to_n_linters[machine] += 1
+
         return container_name, port
 
     def stop_linter_instance(self, machine, container_name):
@@ -161,6 +180,7 @@ class MachineManager:
                 linter_instance = linter
                 break
         self.running_linters.remove(linter_instance)
+        self.machine_to_n_linters[machine] -= 1
 
     def list_linters(self) -> List[LinterEndpoint]:
         # hostport: get only host from machine and add port to particular linter
@@ -184,13 +204,25 @@ class MachineManager:
         for i in range(request.n_instances):
             machine = self.get_machine_with_least_linters()
             self.start_linter_instance(request.linter_name, request.linter_version, machine)
-            self.machine_to_n_linters[machine] += 1
 
     # if the percent to new version == 100 we end rollout and change current version
     def rollout(self, request: RolloutRequest):
         if request.traffic_percent_to_new_version == 100:
             self.linter_name_to_curr_version[request.linter_name] = request.new_version
         self.load_balancer_client.rollout(request)
+
+    async def auto_rollout(self, request: AutoRolloutRequest):
+
+        name = request.linter_name
+        old_version = request.old_version
+        new_version = request.new_version
+        time_steps = request.time_steps
+        traffic_steps = request.traffic_percent_steps
+
+        for curr_time_step, curr_traffic_step in zip(time_steps, traffic_steps):
+            time.sleep(curr_time_step)
+            self.rollout(RolloutRequest(linter_name=name, old_version=old_version, new_version=new_version,
+                                        traffic_percent_to_new_version=curr_traffic_step))
 
     # rollback instantly changes current version to version given in request
     # and makes load_balancer cancel rollout
