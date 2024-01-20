@@ -84,10 +84,19 @@ class RandomStrategy(LoadBalancingStrategy):
         return random.choice(host_port_list)
 
 
+# Its not exactly round robin, but something that works very similar
 class RoundRobinStrategy(LoadBalancingStrategy):
+    def __init__(self):
+        self.load_counters: dict[str, int] = {}
 
+    # The counters will grow infinitely, but won't be a problem
     def choose_linter_instance(self, host_port_list: List[str]) -> str:
-        raise NotImplementedError
+        for host_port in host_port_list:
+            if host_port not in self.load_counters:
+                self.load_counters[host_port] = 0
+        host_port_with_least_load = min(self.load_counters, key=self.load_counters.get)
+        self.load_counters[host_port_with_least_load] += 1
+        return host_port_with_least_load
 
 
 class LoadBalancer:

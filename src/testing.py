@@ -238,5 +238,31 @@ def test_auto_rollout():
     check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 100)
 
 
+@run_stop_system
+def test_rollback_during_auto_rollout():
+    linter_name = "no_semicolons"
+    old_version = "v0"
+    new_version = "v1"
+    code = "#saf;dsaflaksfdjaslf"
+    add_machine_with_linter("localhost", linter_name, "v0", "ghcr.io/chedatomasz/no_semicolons:v0")
+    add_and_start_linter(linter_name, "v1", "ghcr.io/chedatomasz/no_semicolons:v1")
+
+    expected_response_for_v0 = {'status_code': 1, 'message': 'ERROR: found semicolon in line 0 at position 4'}
+    expected_response_for_v1 = {'status_code': 0, 'message': 'CORRECT: no redundant semicolons in code'}
+
+    auto_rollout_request = {"linter_name": linter_name, "old_version": old_version, "new_version": new_version,
+                            "time_steps": [5, 5], "traffic_percent_steps": [50, 100]}
+
+    assert200(TestingUtils.auto_rollout(auto_rollout_request))
+
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 0)
+    time.sleep(6)
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 50)
+    TestingUtils.rollback(linter_name)
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 0)
+    time.sleep(5)
+    check_traffic_percentage(code, expected_response_for_v0, expected_response_for_v1, linter_name, 0)
+
+
 if __name__ == "__main__":
-    test_auto_rollout()
+    test_rollback_during_auto_rollout()
