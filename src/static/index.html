@@ -34,10 +34,6 @@
         <label for="linterName">Linter Name:</label>
         <input type="text" id="linterName" required>
 
-        <!-- FIXME: Remove linter version later    -->
-        <label for="linterVersion">Linter Version:</label>
-        <input type="text" id="linterVersion">
-
         <label for="code">Code:</label>
         <textarea id="code" rows="5" required></textarea>
 
@@ -49,12 +45,10 @@
     <script>
         function lintCode() {
             var linterName = document.getElementById('linterName').value;
-            var linterVersion = document.getElementById('linterVersion').value;
             var code = document.getElementById('code').value;
 
             var requestData = {
                 linter_name: linterName,
-                linter_version: linterVersion,
                 code: code
             };
 
