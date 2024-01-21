@@ -1,16 +1,27 @@
-import argparse
 import random
-import sys
 from abc import ABC, abstractmethod
 from typing import Tuple, Dict, List
 
 import requests
-import uvicorn
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
 from linter_client import LinterClient
+
+
+# used to make load balancer communicate with machine management service
+class MachineManagementClient:
+    def __init__(self, machine_management_url):
+        self.machine_management_url = machine_management_url
+
+    # returns list of host_ports of all linters instances with matching linter name
+    # and which are of current version stored in machine management
+    def get_linters_with_curr_version(self, linter_name) -> List[str]:
+        url = f"{self.machine_management_url}/list_linters_with_curr_version/"
+        return requests.get(url, params={"linter_name": linter_name}).json()
+
+    # returns list of host_ports of all linter instances with matching name and version
+    def get_linter_instances(self, name, version) -> List[str]:
+        url = f"{self.machine_management_url}/list_linter_instances/"
+        return requests.get(url, params={"linter_name": name, "linter_version": version}).json()
 
 
 ################################
@@ -84,58 +95,36 @@ class RandomStrategy(LoadBalancingStrategy):
         return random.choice(host_port_list)
 
 
-# Its not exactly round robin, but something that works very similar
+# It's not exactly round-robin, but something that works very similar
 class RoundRobinStrategy(LoadBalancingStrategy):
     def __init__(self):
         self.load_counters: dict[str, int] = {}
 
-    # The counters will grow infinitely, but won't be a problem
+    # The counters will grow infinitely, but it won't be a problem
     def choose_linter_instance(self, host_port_list: List[str]) -> str:
         for host_port in host_port_list:
             if host_port not in self.load_counters:
                 self.load_counters[host_port] = 0
-        host_port_with_least_load = min(self.load_counters, key=self.load_counters.get)
+
+        host_port_with_least_load = host_port_list[0]
+        for host_port, load in self.load_counters.items():
+            if host_port in host_port_list:
+                if load < self.load_counters[host_port_with_least_load]:
+                    host_port_with_least_load = host_port
+
         self.load_counters[host_port_with_least_load] += 1
+
         return host_port_with_least_load
 
 
 class LoadBalancer:
 
-    def __init__(self, strategy: LoadBalancingStrategy):
-        self.machine_management_url = ""
-
+    def __init__(self, strategy: LoadBalancingStrategy, machine_management_client: MachineManagementClient,
+                 linter_client: LinterClient):
         self.rollout_manager = RolloutManager()
-
+        self.machine_management_client = machine_management_client
         self.strategy = strategy
-
-    # TODO load balancing strategy
-    # for now queries machine management for working linters
-    def get_all_linters(self):
-        url = f"{self.machine_management_url}/list_linters/"
-        return requests.get(url).json()
-
-    # returns list of host_ports of all linters instances with matching linter name
-    # and which are of current version stored in machine management
-    def get_linters_with_curr_version(self, linter_name) -> List[str]:
-        url = f"{self.machine_management_url}/list_linters_with_curr_version/"
-        return requests.get(url, params={"linter_name": linter_name}).json()
-
-    # returns list of host_ports of all linter instances with matching name and version
-    def get_linter_instances(self, name, version) -> List[str]:
-        url = f"{self.machine_management_url}/list_linter_instances/"
-        return requests.get(url, params={"linter_name": name, "linter_version": version}).json()
-
-    def get_matching_linters(self, linter_name: str):
-        all_linters = self.get_all_linters()
-        print(all_linters)
-        result = [linter for linter in all_linters if linter["name"] == linter_name]
-        # if linter_version is not None and linter_version != "":
-        #     result = [linter for linter in result if linter["version"] == linter_version]
-        return result
-
-    def get_endpoint(self, linter_name: str, linter_version: str):
-        possible_linters = self.get_matching_linters(linter_name)
-        return possible_linters[0]["hostport"]  # TODO strategy goes here
+        self.linter_client = linter_client
 
     def lint_code(self, linter_name: str, code: str) -> Tuple[int, str]:
         # keep the code in memory
@@ -145,84 +134,13 @@ class LoadBalancer:
         if self.rollout_manager.is_rollout(linter_name):
 
             version = self.rollout_manager.choose_version(linter_name)
-            host_port = self.strategy.choose_linter_instance(self.get_linter_instances(linter_name, version))
+            host_port = self.strategy.choose_linter_instance(
+                self.machine_management_client.get_linter_instances(linter_name, version))
         else:
-            host_port = self.strategy.choose_linter_instance(self.get_linters_with_curr_version(linter_name))
+            host_port = self.strategy.choose_linter_instance(
+                self.machine_management_client.get_linters_with_curr_version(linter_name))
 
         # this two lines just send code to linter and get response
-        client = LinterClient(host_port)
-        status_code, message = client.lint_code(code)
+        status_code, message = self.linter_client.lint_code(host_port, code)
 
         return status_code, message
-
-
-############################
-
-# FASTAPI-SPECIFIC CODE
-
-############################
-
-app = FastAPI()
-loadbalancer = LoadBalancer(RandomStrategy())
-
-
-class LintingRequest(BaseModel):
-    linter_name: str
-    code: str
-
-
-class ResponseMessage(BaseModel):
-    status_code: int
-    message: str
-
-
-class RolloutRequest(BaseModel):
-    linter_name: str
-    old_version: str
-    new_version: str
-    traffic_percent_to_new_version: float
-
-
-# Order matters here - routes are greedily applied top-down
-@app.post("/lint_code/", response_model=ResponseMessage)
-async def lint_code_endpoint(request: LintingRequest):
-    linter_name = request.linter_name
-    code = request.code
-    status_code, message = loadbalancer.lint_code(linter_name, code)
-    return ResponseMessage(status_code=status_code, message=message)
-
-
-@app.post("/rollout/")
-async def rollout_endpoint(request: RolloutRequest):
-    if request.traffic_percent_to_new_version == 100:
-        loadbalancer.rollout_manager.end_rollout(request.linter_name)
-    else:
-        old = request.old_version
-        new = request.new_version
-        traffic = request.traffic_percent_to_new_version
-        loadbalancer.rollout_manager.start_rollout(request.linter_name, RolloutData(old, new, traffic))
-
-
-@app.post("/rollback/")
-async def rollback_endpoint(linter_name: str):
-    loadbalancer.rollout_manager.end_rollout(linter_name)
-
-
-app.mount("/", StaticFiles(directory="./static", html=True))
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-host', '--host')
-    parser.add_argument('-port', '--port')
-    parser.add_argument('-mma', '--machine_management_address')
-    parsed_args = parser.parse_args()
-    loadbalancer.machine_management_url = parsed_args.machine_management_address
-
-    print(parsed_args)
-
-    uvicorn.run(app, port=int(parsed_args.port), host=parsed_args.host)
-
-
-if __name__ == "__main__":
-    main()
