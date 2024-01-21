@@ -126,13 +126,10 @@ class LoadBalancer:
         self.strategy = strategy
         self.linter_client = linter_client
 
-    def lint_code(self, linter_name: str, code: str) -> Tuple[int, str]:
-        # keep the code in memory
+    def choose_linter(self, linter_name):
 
-        # TODO retry on failure, rerouting
-        # manage rollout
+        # first choose needed version, then apply load balancing
         if self.rollout_manager.is_rollout(linter_name):
-
             version = self.rollout_manager.choose_version(linter_name)
             host_port = self.strategy.choose_linter_instance(
                 self.machine_management_client.get_linter_instances(linter_name, version))
@@ -140,7 +137,19 @@ class LoadBalancer:
             host_port = self.strategy.choose_linter_instance(
                 self.machine_management_client.get_linters_with_curr_version(linter_name))
 
-        # this two lines just send code to linter and get response
-        status_code, message = self.linter_client.lint_code(host_port, code)
+        return host_port
 
-        return status_code, message
+    def lint_code(self, linter_name: str, code: str) -> Tuple[int, str]:
+        # keep the code in memory
+        host_port = self.choose_linter(linter_name)
+
+        # TODO retry on failure, rerouting add some cache to remember not responsive linters
+        # Real linting happens here
+
+        try:
+            status_code, message = self.linter_client.lint_code(host_port, code)
+            return status_code, message
+        except RuntimeError:
+            status_code, message = 1, "linter error"
+            return status_code, message
+

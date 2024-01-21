@@ -84,6 +84,13 @@ def create_app(load_balancer_client):
         logging.info("machine_management got rollback request")
         return machine_manager.rollback(linter_name, linter_version)
 
+    # receive report from health check and restart broken linters
+    @app.post("/report_broken_linters/")
+    async def report_broken_linters(host_ports: List[str]):
+        logging.info("machine_management got broken linters report")
+        return machine_manager.restart_broken_linters(host_ports)
+
+
     ########################
     # DEBUG ENDPOINTS
     ########################

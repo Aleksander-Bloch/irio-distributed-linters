@@ -254,3 +254,12 @@ class MachineManager:
         self.linter_name_to_auto_rollout.pop(linter_name, "accept absence of key")
         self.load_balancer_client.rollback(linter_name)
         self.rollout_lock.release()
+
+    def restart_broken_linters(self, host_ports):
+
+        to_restart = list(filter(lambda l: l.get_host_port() in host_ports, self.running_linters))
+
+        for linter in to_restart:
+            self.stop_linter_instance(linter.machine, linter.container_name)
+            time.sleep(1)
+            self.start_linter_instance(linter.linter_name, linter.linter_version, linter.machine)

@@ -28,52 +28,61 @@ class RoundRobinStrategyTester(unittest.TestCase):
         self.assertEqual(Counter(list(round_robin_strategy.load_counters.values())), Counter([4, 3, 3]))
 
 
+# used just for testing
+class Linter:
+    def __init__(self, name, version, host_port, linting_function):
+        self.name = name
+        self.version = version
+        self.host_port = host_port
+        self.linting_function = linting_function
+
+    @staticmethod
+    def lint_func1(code):
+        return 0, str(hash(code))
+
+    @staticmethod
+    def lint_func2(code):
+        return 1, str(hash(code))
+
+
 class TestLinting(unittest.TestCase):
-    code_1 = "code_1"
-    expected_result_1 = (0, "result_1")
-    expected_result_1_dict = {"status_code": expected_result_1[0], "message": expected_result_1[1]}
-
-    expected_host_port_1 = "host_port_1"
+    linter_list = [Linter("name1", "v1", "hp1", Linter.lint_func1),
+                   Linter("name2", "v1", "hp2", Linter.lint_func2)]
 
     @staticmethod
-    def get_name(n):
-        return f"name_{n}"
+    def lint_result_to_dict(lint_result):
+        return {"status_code": lint_result[0], "message": lint_result[1]}
 
-    @staticmethod
-    def get_host_ports(n):
-        return [f"host_port_{i}_{n}" for i in range(10)]
+    def get_linters_with_curr_version(self, name):
+        return [linter.host_port for linter in self.linter_list if linter.name == name]
 
-    #linter_name_to_host_port = {get_name(n): get_host_ports(n) for n in range(10)}
-
-    def fresh_app(self):
-        # TODO make mock parts of the system work correctly
+    def fresh_client(self):
         machine_management_client = Mock()
-        machine_management_client.get_linters_with_curr_version.side_effect = [
-            self.expected_host_port_1]  # self.linter_name_to_host_port.get
-        machine_management_client.get_linter_instances.return_value = [self.expected_host_port_1]
+        machine_management_client.get_linters_with_curr_version.side_effect = lambda \
+            name: self.get_linters_with_curr_version(name)
 
         def fake_lint_code(host_port, code):
-            if host_port != self.expected_host_port_1 or code != self.code_1:
-                return 1, "bad result"
-
-            return self.expected_result_1
+            linter = list(filter(lambda x: x.host_port == host_port, self.linter_list))[0]
+            return linter.linting_function(code)
 
         linter_client = Mock()
         linter_client.lint_code.side_effect = fake_lint_code
 
-        return create_app(strategy=RoundRobinStrategy(),
-                          machine_management_client=machine_management_client, linter_client=linter_client)
+        app = create_app(strategy=RoundRobinStrategy(),
+                         machine_management_client=machine_management_client, linter_client=linter_client)
 
-    @staticmethod
-    def fresh_client(fresh_app):
-        return TestClient(fresh_app)
+        return TestClient(app)
 
     def setUp(self):
-        self.client = TestLinting.fresh_client(self.fresh_app())
+        self.client = self.fresh_client()
 
     def test_basic_linting(self):
-        response = self.client.post("/lint_code/", json={"linter_name": "linter_1", "code": self.code_1})
-        self.assertEqual(json.loads(response.content.decode('utf-8')), self.expected_result_1_dict)
+        linter = self.linter_list[0]
+        code = "abcd"
+
+        response = self.client.post("/lint_code/", json={"linter_name": linter.name, "code": code})
+        self.assertEqual(json.loads(response.content.decode('utf-8')),
+                         TestLinting.lint_result_to_dict(linter.linting_function(code)))
 
 
 if __name__ == '__main__':
