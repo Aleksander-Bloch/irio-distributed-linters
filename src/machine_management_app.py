@@ -2,16 +2,15 @@ import argparse
 import logging
 import sys
 import threading
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from container_manager import SSHContainerManager
 from machine_manager import LoadBalancerClient, LinterEndpoint, MachineManager, RegisterLinterData, RolloutRequest, \
     StartLintersRequest, AutoRolloutRequest
-from container_manager import SSHContainerManager
-import threading
 
 
 def create_app(load_balancer_client):
@@ -24,7 +23,6 @@ def create_app(load_balancer_client):
 
     @app.post("/add_machine/")
     async def add_machine(request: AddMachine):
-        print("got machine request")
         return machine_manager.add_machine(request.host)
 
     @app.post("delete_machine/")
@@ -90,7 +88,6 @@ def create_app(load_balancer_client):
         logging.info("machine_management got broken linters report")
         return machine_manager.restart_broken_linters(host_ports)
 
-
     ########################
     # DEBUG ENDPOINTS
     ########################
@@ -106,7 +103,7 @@ def create_app(load_balancer_client):
 
 
 def main():
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument('-host', '--host')
     parser.add_argument('-port', '--port')

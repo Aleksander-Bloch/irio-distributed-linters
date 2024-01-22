@@ -10,72 +10,76 @@
             font-family: Arial, sans-serif;
             margin: 20px;
         }
+
         form {
             display: flex;
             flex-direction: column;
             max-width: 400px;
             margin-bottom: 20px;
         }
+
         label {
             margin-bottom: 5px;
         }
+
         input, textarea {
             margin-bottom: 10px;
             padding: 5px;
         }
+
         #result {
             max-width: 600px;
         }
     </style>
 </head>
 <body>
-    <h1>Lint Code</h1>
-    <form id="lintForm">
-        <label for="linterName">Linter Name:</label>
-        <input type="text" id="linterName" required>
+<h1>Lint Code</h1>
+<form id="lintForm">
+    <label for="linterName">Linter Name:</label>
+    <input type="text" id="linterName" required>
 
-        <label for="code">Code:</label>
-        <textarea id="code" rows="5" required></textarea>
+    <label for="code">Code:</label>
+    <textarea id="code" rows="5" required></textarea>
 
-        <button type="button" onclick="lintCode()">Lint Code</button>
-    </form>
+    <button type="button" onclick="lintCode()">Lint Code</button>
+</form>
 
-    <div id="result"></div>
+<div id="result"></div>
 
-    <script>
-        function lintCode() {
-            var linterName = document.getElementById('linterName').value;
-            var code = document.getElementById('code').value;
+<script>
+    function lintCode() {
+        var linterName = document.getElementById('linterName').value;
+        var code = document.getElementById('code').value;
 
-            var requestData = {
-                linter_name: linterName,
-                code: code
-            };
+        var requestData = {
+            linter_name: linterName,
+            code: code
+        };
 
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', 'http://127.0.0.1:8000/lint_code/', true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', 'http://127.0.0.1:8000/lint_code/', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
 
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        var response = JSON.parse(xhr.responseText);
-                        displayLintingResult(response);
-                    } else {
-                        document.getElementById('result').innerHTML = '<p>Linting failed. Please check the input and try again.</p>';
-                        console.error(xhr.statusText);
-                    }
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    displayLintingResult(response);
+                } else {
+                    document.getElementById('result').innerHTML = '<p>Linting failed. Please check the input and try again.</p>';
+                    console.error(xhr.statusText);
                 }
-            };
+            }
+        };
 
-            xhr.send(JSON.stringify(requestData));
-        }
+        xhr.send(JSON.stringify(requestData));
+    }
 
-        function displayLintingResult(response) {
-            var resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = '<p>Status Code: ' + response.status_code + '</p>';
-            resultDiv.innerHTML += '<p>Message: ' + response.message + '</p>';
-        }
-    </script>
+    function displayLintingResult(response) {
+        var resultDiv = document.getElementById('result');
+        resultDiv.innerHTML = '<p>Status Code: ' + response.status_code + '</p>';
+        resultDiv.innerHTML += '<p>Message: ' + response.message + '</p>';
+    }
+</script>
 </body>
 </html>

@@ -2,13 +2,6 @@ import subprocess
 import time
 
 
-# load_balancer_port = "8000"
-# machine_management_port = "8001"
-#
-# load_balancer_host = "localhost"
-# machine_management_host = "localhost"
-
-
 class SystemObj:
 
     def __init__(self, p_machine_management, p_load_balancer, p_health_check):
@@ -21,7 +14,6 @@ def run_system(load_balancer_host="localhost", load_balancer_port="8000", machin
                machine_management_port="8001", health_check_host="localhost", health_check_port="8002") -> SystemObj:
     load_balancer_addr = f"http://{load_balancer_host}:{load_balancer_port}"
     machine_management_addr = f"http://{machine_management_host}:{machine_management_port}"
-    health_check_addr = f"http://{health_check_host}:{health_check_port}"
 
     # run machine management
     p_machine_management = subprocess.Popen(
@@ -40,6 +32,7 @@ def run_system(load_balancer_host="localhost", load_balancer_port="8000", machin
     return SystemObj(p_machine_management, p_load_balancer, p_health_check)
 
 
+# WARNING: it does not stop docker containers
 def stop_system(_system_obj: SystemObj):
     _system_obj.p_machine_management.kill()
     _system_obj.p_load_balancer.kill()
@@ -48,5 +41,11 @@ def stop_system(_system_obj: SystemObj):
 
 if __name__ == "__main__":
     _system_obj = run_system()
-    time.sleep(7)
+    time.sleep(2)
+
+    while True:
+        message = input("type exit to stop the system\n")
+        if message == "exit":
+            break
+
     stop_system(_system_obj)

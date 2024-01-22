@@ -49,11 +49,11 @@ def check_traffic_percentage(code: str, expected_result_old: dict, expected_resu
 
     parsed_responses = [literal_eval(r.content.decode('utf-8')) for r in responses]
 
-    assert parsed_responses.count(
-        expected_result_new) == n_expected_to_new, f"{parsed_responses.count(expected_result_new)} != {n_expected_to_new}"
+    n_to_new = parsed_responses.count(expected_result_new)
+    n_to_old = parsed_responses.count(expected_result_old)
 
-    assert parsed_responses.count(
-        expected_result_old) == n_expected_to_old, f"{parsed_responses.count(expected_result_old)} != {n_expected_to_old}"
+    assert n_to_new == n_expected_to_new, f"sent to new = {n_to_new} != {n_expected_to_new} = expected sent to new"
+    assert n_to_old == n_expected_to_old, f"sent to old = {n_to_old} != {n_expected_to_old} = expected sent to old"
 
 
 def run_stop_system(func):
@@ -72,19 +72,11 @@ def run_stop_system(func):
 
 
 @run_stop_system
-def test_start_linter_instance():
-    add_machine_with_linter("localhost", "no_semicolons", "v0", "ghcr.io/chedatomasz/no_semicolons:v0")
-
-
-@run_stop_system
 def test_single_linting():
     add_machine_with_linter("localhost", "no_semicolons", "v0", "ghcr.io/chedatomasz/no_semicolons:v0")
 
     response = TestingUtils.lint_code("no_semicolons", "dsfjsdalfdsaf;fksjfklsdaf")
     assert response.status_code == 200
-
-    print(response.content)
-    print(response.status_code)
 
 
 @run_stop_system
@@ -97,8 +89,6 @@ def test_multiple_linting():
         for future in concurrent.futures.as_completed(futures):
             try:
                 response = future.result()
-                print(response.content)
-                print(response.status_code)
                 assert response.status_code == 200
             except Exception as exc:
                 print(exc)
@@ -130,9 +120,6 @@ def test_rollout_sequential():
         response = TestingUtils.lint_code("no_semicolons", code)
         responses.append(literal_eval(response.content.decode('utf-8')))
 
-    for r in responses:
-        print(r)
-
     assert responses.count(expected_response_for_v1) == round(n_requests * percent_to_new_version / 100)
     assert responses.count(expected_response_for_v0) == round(n_requests * (100 - percent_to_new_version) / 100)
 
@@ -160,9 +147,6 @@ def test_rollout_concurrent():
     responses = TestingUtils.collect_concurrent_linting_responses("no_semicolons", code, n_requests)
 
     parsed_responses = [literal_eval(r.content.decode('utf-8')) for r in responses]
-
-    for r in parsed_responses:
-        print(r)
 
     assert parsed_responses.count(expected_response_for_v1) == round(n_requests * percent_to_new_version / 100)
     assert parsed_responses.count(expected_response_for_v0) == round(n_requests * (100 - percent_to_new_version) / 100)
@@ -194,9 +178,6 @@ def test_rollback():
 
     parsed_responses = [literal_eval(r.content.decode('utf-8')) for r in responses]
 
-    for r in parsed_responses:
-        print(r)
-
     assert parsed_responses.count(expected_response_for_v1) == round(n_requests * percent_to_new_version / 100)
     assert parsed_responses.count(expected_response_for_v0) == round(n_requests * (100 - percent_to_new_version) / 100)
 
@@ -204,9 +185,6 @@ def test_rollback():
     responses = TestingUtils.collect_concurrent_linting_responses(linter_name, code, n_requests)
 
     parsed_responses = [literal_eval(r.content.decode('utf-8')) for r in responses]
-
-    for r in parsed_responses:
-        print(r)
 
     # after rollback all request should come from version v0
     assert parsed_responses.count(expected_response_for_v0) == n_requests
@@ -265,4 +243,10 @@ def test_rollback_during_auto_rollout():
 
 
 if __name__ == "__main__":
+    test_single_linting()
+    test_multiple_linting()
+    test_rollout_sequential()
+    test_rollout_concurrent()
+    test_rollback()
+    test_auto_rollout()
     test_rollback_during_auto_rollout()

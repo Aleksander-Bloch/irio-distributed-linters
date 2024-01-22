@@ -31,7 +31,7 @@ def create_app(machine_management_client, linter_client, health_check_delay=5):
 
 
 def main():
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument('-host', '--host')
     parser.add_argument('-port', '--port')

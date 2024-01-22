@@ -7,9 +7,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from load_balancer import LoadBalancer, MachineManagementClient, RolloutData, RandomStrategy, RoundRobinStrategy
-
 from linter_client import LinterClient
+from load_balancer import LoadBalancer, MachineManagementClient, RolloutData, RoundRobinStrategy
 
 
 # app takes linter_client only for testing simplicity
@@ -41,7 +40,10 @@ def create_app(strategy, machine_management_client, linter_client):
 
     @app.post("/rollout/")
     async def rollout_endpoint(request: RolloutRequest):
+        logging.info(
+            f"ROLLOUT linter_name: {request.linter_name}, old_version: {request.old_version}, new_version: {request.new_version}, traffic_percent_to_new_version: {request.traffic_percent_to_new_version}")
         if request.traffic_percent_to_new_version == 100:
+            logging.info("Got 100 percent rollout request")
             load_balancer.rollout_manager.end_rollout(request.linter_name)
         else:
             old = request.old_version
@@ -59,15 +61,12 @@ def create_app(strategy, machine_management_client, linter_client):
 
 
 def main():
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument('-host', '--host')
     parser.add_argument('-port', '--port')
     parser.add_argument('-mma', '--machine_management_address')
     parsed_args = parser.parse_args()
-    # loadbalancer.machine_management_url = parsed_args.machine_management_address
-
-    print(parsed_args)
 
     machine_management_client = MachineManagementClient(machine_management_url=parsed_args.machine_management_address)
     app = create_app(strategy=RoundRobinStrategy(), machine_management_client=machine_management_client,

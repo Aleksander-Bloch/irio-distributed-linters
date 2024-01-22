@@ -7,6 +7,7 @@ import requests
 def assert200(response):
     assert response.status_code == 200
 
+
 class TestingUtils:
     load_balancer_port = "8000"
     machine_management_port = "8001"

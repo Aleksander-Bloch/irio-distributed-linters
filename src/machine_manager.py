@@ -1,12 +1,12 @@
+import logging
 import threading
 import time
-
-from pydantic import BaseModel
-from container_manager import ContainerManager
+from typing import Callable, Dict, List, Tuple
 
 import requests
-import logging
-from typing import Callable, Dict, List, Tuple
+from pydantic import BaseModel
+
+from container_manager import ContainerManager
 
 
 class LoadBalancerClient:
@@ -126,7 +126,6 @@ class MachineManager:
         """Kill all linter instances and deregister"""
         logging.info(f"Removing linter named {linter_name}, version {linter_version}")
 
-        # TODO may be we should do something about not existing linter
         self.linter_images.pop((linter_name, linter_version), "ignore if not exists")
 
         running_instances = [linter for linter in self.running_linters if
@@ -157,7 +156,6 @@ class MachineManager:
 
         cont_manager = self.container_managers[machine]
         docker_image = self.linter_images[linter_name, linter_version]
-        # TODO start_container may fail and throw
         port, container_name = cont_manager.start_container(docker_image=docker_image)
         logging.info(
             f"Started linter {linter_name} v {linter_version} instance on {machine} port {port} as {container_name}")
@@ -176,7 +174,6 @@ class MachineManager:
 
     def stop_linter_instance(self, machine, container_name):
         """Kill a linter instance"""
-        # TODO stop_container may fail and throw
         self.container_managers[machine].stop_container(container_name)
 
         linter_instance = None
@@ -212,8 +209,14 @@ class MachineManager:
 
     # if the percent to new version == 100 we end rollout and change current version
     def rollout(self, request: RolloutRequest):
+        logging.debug(f"got request: linter_name = {request.linter_name},"
+                      f" old_version = {request.old_version}, new_version = {request.new_version},"
+                      f" traffic_to_new = {request.traffic_percent_to_new_version}")
+
         if request.traffic_percent_to_new_version == 100:
             self.linter_name_to_curr_version[request.linter_name] = request.new_version
+            logging.info(
+                f"got 100 percent rollout changed current version of {request.linter_name} to {request.new_version}")
         self.load_balancer_client.rollout(request)
 
     def auto_rollout(self, request: AutoRolloutRequest):
@@ -232,11 +235,12 @@ class MachineManager:
 
             self.rollout_lock.acquire()
 
-            stop_rollout = not self.linter_name_to_auto_rollout.pop(name, False)
+            stop_rollout = name not in self.linter_name_to_auto_rollout
 
             if not stop_rollout:
                 self.rollout(RolloutRequest(linter_name=name, old_version=old_version, new_version=new_version,
                                             traffic_percent_to_new_version=curr_traffic_step))
+
             self.rollout_lock.release()
 
             if stop_rollout:

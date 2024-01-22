@@ -59,7 +59,7 @@ class TestLinting(unittest.TestCase):
     def fresh_client(self):
         machine_management_client = Mock()
         machine_management_client.get_linters_with_curr_version.side_effect = lambda \
-            name: self.get_linters_with_curr_version(name)
+                name: self.get_linters_with_curr_version(name)
 
         def fake_lint_code(host_port, code):
             linter = list(filter(lambda x: x.host_port == host_port, self.linter_list))[0]

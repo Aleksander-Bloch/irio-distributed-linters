@@ -1,14 +1,16 @@
-from linter_base import LinterBase, CODE_SUCCESS, CODE_FAILURE
 from typing import Tuple
+
+from linter_base import LinterBase, CODE_SUCCESS, CODE_FAILURE
+
 
 class LinterImpl(LinterBase):
 
     def get_name(self) -> str:
         return "no_semicolons"
-    
+
     def get_version(self) -> str:
         return "v0"
-    
+
     def lint_code(self, code) -> Tuple[int, str]:
         lines = code.splitlines()
         for line_num, line in enumerate(lines):

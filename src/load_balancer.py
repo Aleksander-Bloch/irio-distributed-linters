@@ -143,13 +143,10 @@ class LoadBalancer:
         # keep the code in memory
         host_port = self.choose_linter(linter_name)
 
-        # TODO retry on failure, rerouting add some cache to remember not responsive linters
         # Real linting happens here
-
         try:
             status_code, message = self.linter_client.lint_code(host_port, code)
             return status_code, message
         except RuntimeError:
             status_code, message = 1, "linter error"
             return status_code, message
-

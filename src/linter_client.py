@@ -1,7 +1,10 @@
 from typing import Tuple
+
 import grpc
+
 import linter_pb2
 import linter_pb2_grpc
+
 
 # This could be a function, but it is a class to simplify tests.
 class LinterClient:

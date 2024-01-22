@@ -1,11 +1,10 @@
-from abc import ABC, abstractmethod
 import logging
 import subprocess
-import uuid
-from typing import Tuple
 import time
+import uuid
+from abc import ABC, abstractmethod
+from typing import Tuple
 
-# TODO make this threadsafe
 
 class ContainerManager(ABC):
 
@@ -31,10 +30,8 @@ class SSHContainerManager(ContainerManager):
         # container name is random and unique
         self.occupied_ports = dict()
         self._health_check()
-        # TODO add destructor which kills containers
 
     # returns new port which is not occupied by our system
-    # TODO we don't check if it is occupied by some other service
     def _get_port(self):
         port = self.STARTING_PORT
         while port in self.occupied_ports.values():
@@ -43,7 +40,6 @@ class SSHContainerManager(ContainerManager):
 
     def _health_check(self):
         try:
-            # TODO: go through working docker containers and check if all expected to work really work
             res = subprocess.run(["ssh", f"{self.machine}", "docker ps"])
             res.check_returncode()
         except subprocess.CalledProcessError as exc:
@@ -55,8 +51,6 @@ class SSHContainerManager(ContainerManager):
 
         machine_port = self._get_port()
         # we don't know what ports are currently used by our operating system
-        # TODO change to something with error checking
-        # TODO this will fail if the port is used
         self.occupied_ports[container_name] = machine_port
         logging.debug("Running container manager command...")
 

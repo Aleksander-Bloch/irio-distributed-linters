@@ -1,7 +1,7 @@
+import logging
 import time
 
 import requests
-import logging
 
 
 class MachineManagerClient:

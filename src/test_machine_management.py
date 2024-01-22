@@ -1,6 +1,8 @@
-import pytest
 from unittest.mock import Mock
+
+import pytest
 from fastapi.testclient import TestClient
+
 from machine_management_app import create_app
 
 
@@ -62,8 +64,3 @@ def test_deregister_linter(fresh_client, example_linter_registration):
     requery_response = client.get("/list_registered_linters/")
     assert requery_response.status_code == 200
     assert requery_response.json() == []
-
-
-@pytest.mark.skip
-def test_linter_deregistration_removes_instances():
-    raise NotImplementedError  # TODO implement

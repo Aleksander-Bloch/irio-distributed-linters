@@ -1,11 +1,12 @@
-from concurrent import futures
 import logging
-import grpc
+from concurrent import futures
 
-import linter_pb2, linter_pb2_grpc
+import grpc
+import linter_pb2
+import linter_pb2_grpc
+from linter_implementation import LinterImpl
 
 from linter_base import LinterBase
-from linter_implementation import LinterImpl
 
 
 # This file is moved to the correct path by Dockerfile, a bit hacky to avoid code duplication.
